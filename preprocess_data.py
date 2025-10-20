@@ -6,11 +6,12 @@ import pyarrow.parquet as pq
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-ID_COLUMN = "WineID"               # in the source: a LIST of product IDs per query
+RESULTS_COLUMN = "results"               # in the source: a LIST of product IDs per query
+WINE_ID_COLUMN = "WineID"          # in the catalog
 LABELS_COLUMN = "new_labels"       # one-hot per query (length = #candidates)
 QUERY_COLUMN = "query"
 
-FLUSH_EVERY = 5_000                # rows per write_batch
+FLUSH_EVERY = 2_000                # rows per write_batch
 PARQUET_COMPRESSION = "zstd"
 
 class DataPreprocessor:
@@ -73,7 +74,7 @@ class DataPreprocessor:
 
     def preprocess_row(self, row) -> Optional[Dict[str, Any]]:
 
-        product_ids = row[ID_COLUMN]
+        product_ids = row[RESULTS_COLUMN]
         product_texts = [self.catalog_dict.get(pid, "") for pid in product_ids]
         n_products = len(product_texts)
 
@@ -107,7 +108,7 @@ class DataPreprocessor:
         if "product_embed_description" not in df.columns:
             raise ValueError("catalog_file must contain 'product_embed_description'.")
         series = (
-            df.set_index(ID_COLUMN)["product_embed_description"]
+            df.set_index(WINE_ID_COLUMN)["product_embed_description"]
               .fillna("")
               .astype(str)
         )
@@ -138,4 +139,25 @@ class DataPreprocessor:
 
 
 if __name__ == "__main__":
-    
+
+    train_click = "click_train.parquet"
+    test_click = "click_test.parquet"
+    catalog = "catalog.parquet"
+    output_train = "preprocessed_click_train.parquet"
+    output_test = "preprocessed_click_test.parquet"
+    preprocessor = DataPreprocessor(
+        preprocessing_file=train_click,
+        catalog_file=catalog,
+        output_file=output_train,
+        batch_size=64,
+        max_length=256
+    )
+    preprocessor.run_preprocessing()
+    preprocessor = DataPreprocessor(
+        preprocessing_file=test_click,
+        catalog_file=catalog,
+        output_file=output_test,
+        batch_size=64,
+        max_length=256
+    )
+    preprocessor.run_preprocessing()
