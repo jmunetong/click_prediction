@@ -1,0 +1,5 @@
+*.ipynb
+wines/
+*.parquet
+*.pdf
+parquet_processing.py
