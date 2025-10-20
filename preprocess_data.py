@@ -1,96 +1,141 @@
+import os
 import pandas as pd
 from transformers import AutoTokenizer
 import pyarrow as pa
 import pyarrow.parquet as pq
 import numpy as np
+from typing import Dict, List, Any, Optional
 
-ID_COLUMN = 'WineID'
-SCHEMA = pa.schema([       
-    pa.field("input_ids", pa.list_(pa.list_(pa.int32()))),  # [N, L]
-    pa.field("attention_mask", pa.list_(pa.list_(pa.int8()))),
-    pa.field("label_index", pa.int32()),
-    pa.field("n_candidates", pa.int32()),
-])
+ID_COLUMN = "WineID"               # in the source: a LIST of product IDs per query
+LABELS_COLUMN = "new_labels"       # one-hot per query (length = #candidates)
+QUERY_COLUMN = "query"
 
+FLUSH_EVERY = 5_000                # rows per write_batch
+PARQUET_COMPRESSION = "zstd"
 
 class DataPreprocessor:
-    def __init__(self, preprocessing_file: str, catalog_file: str, output_file: str, batch_size: int = 32, max_length: int = 256, device: str = None):
+    def __init__(
+        self,
+        preprocessing_file: str,   # source parquet with queries, product ID lists, labels
+        catalog_file: str,         # parquet with catalog; must contain WineID + product_embed_description
+        output_file: str,          # single output parquet path
+        batch_size: int = 32,
+        max_length: int = 256
+    ):
         self.preprocessing_file = preprocessing_file
-        self.catalog_dict = self.read_catalog(catalog_file)
+        self.catalog_dict = self.read_catalog(catalog_file)      # {WineID -> str(product_embed_description)}
         self.output_file = output_file
-        self.device = device
         self.batch_size = batch_size
-        self.tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", device=self.device)
-        self.schema = self._init_output_schema()
-        # This is where we will store rows before writing to Parquet
-        self.buffer = self._empty_buffer()
+        self.max_length = max_length
 
-    def _empty_buffer(self):
+    
+        self.tokenizer = AutoTokenizer.from_pretrained("roberta-base", use_fast=True)
+
+        # Arrow schema: ragged N and ragged token lengths L
+        self.schema = pa.schema([
+            pa.field("input_ids", pa.list_(pa.list_(pa.int32()))),      # [N, L_i]
+            pa.field("attention_mask", pa.list_(pa.list_(pa.int8()))),  # [N, L_i]
+            pa.field("label_index", pa.int32()),
+            pa.field("n_candidates", pa.int32()),
+        ])
+
+    def run_preprocessing(self):
+        writer = pq.ParquetWriter(
+            self.output_file,
+            schema=self.schema,
+            compression=PARQUET_COMPRESSION,
+            use_dictionary=True,
+        )
+
+        buffer = self._empty_buffer()
+        try:
+            src_pf = pq.ParquetFile(self.preprocessing_file)
+            for batch in src_pf.iter_batches(batch_size=self.batch_size):
+                df = batch.to_pandas() 
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
+                    out = self.preprocess_row(row)
+                    if out is None:
+                        continue
+
+                    buffer["input_ids"].append(out["input_ids"])
+                    buffer["attention_mask"].append(out["attention_mask"])
+                    buffer["label_index"].append(out["label_index"])
+                    buffer["n_candidates"].append(out["n_candidates"])
+
+                    if len(buffer["input_ids"]) >= FLUSH_EVERY:
+                        self._write_buffer_to_parquet(buffer, writer)
+
+            # final flush
+            self._write_buffer_to_parquet(buffer, writer)
+        finally:
+            writer.close()
+
+    def preprocess_row(self, row) -> Optional[Dict[str, Any]]:
+
+        product_ids = row[ID_COLUMN]
+        product_texts = [self.catalog_dict.get(pid, "") for pid in product_ids]
+        n_products = len(product_texts)
+
+        label_index = np.argmax(row[LABELS_COLUMN])
+    
+        # tokenize N (query, candidate_i) pairs
+        query = row[QUERY_COLUMN]
+        enc = self.tokenizer(
+            [query] * n_products,
+            product_texts,
+            truncation=True,
+            max_length=self.max_length,
+            padding=False,               # store true lengths; do dynamic padding in collate
+            return_attention_mask=True, 
+        )
+
+        # ensure numeric types for Arrow
+        input_ids = [list(map(int, seq)) for seq in enc["input_ids"]]
+        attention_mask = [list(map(int, seq)) for seq in enc["attention_mask"]]
+
         return {
-            "query_id": [],
+            "input_ids": input_ids,                   # list[list[int]] length N
+            "attention_mask": attention_mask,         # list[list[int]] length N
+            "label_index": int(label_index),          # scalar
+            "n_candidates": int(n_products),          # scalar
+        }
+
+    def read_catalog(self, catalog_file: str) -> Dict[Any, str]:
+        df = pd.read_parquet(catalog_file)
+        # ensure we have the right columns and strings (no NaN)
+        if "product_embed_description" not in df.columns:
+            raise ValueError("catalog_file must contain 'product_embed_description'.")
+        series = (
+            df.set_index(ID_COLUMN)["product_embed_description"]
+              .fillna("")
+              .astype(str)
+        )
+        return series.to_dict()
+
+    def _empty_buffer(self) -> Dict[str, List[Any]]:
+        return {
             "input_ids": [],
             "attention_mask": [],
             "label_index": [],
             "n_candidates": [],
         }
 
-    def _init_output_schema(self):
-        self.schema = pa.schema([
-        pa.field("input_ids", pa.list_(pa.list_(pa.int32()))),  # [N, L]
-        pa.field("attention_mask", pa.list_(pa.list_(pa.int8()))),
-        pa.field("label_index", pa.int32()),
-        pa.field("n_candidates", pa.int32()),
-    ])
+    def _write_buffer_to_parquet(self, buffer: Dict[str, List[Any]], writer: pq.ParquetWriter):
+        if not buffer["input_ids"]:
+            return
+        arrays = {
+            "input_ids": pa.array(buffer["input_ids"], type=self.schema.field("input_ids").type),
+            "attention_mask": pa.array(buffer["attention_mask"], type=self.schema.field("attention_mask").type),
+            "label_index": pa.array(buffer["label_index"], type=self.schema.field("label_index").type),
+            "n_candidates": pa.array(buffer["n_candidates"], type=self.schema.field("n_candidates").type),
+        }
+        batch = pa.record_batch(arrays, schema=self.schema)
+        writer.write_batch(batch)
+        # clear buffer
+        for k in buffer:
+            buffer[k].clear()
 
 
-    def run_preprocessing(self):
-        parquet_file = pq.ParquetFile(self.preprocessing_file)
-        processed_rows = []
-        for batch in parquet_file.iter_batches(batch_size=self.batch_size):
-            df = batch.to_pandas()
-            for idx in range(len(df)):
-                row = df.iloc[idx]
-                tokenized =  self._process_row(row)
-                processed_rows.append({
-                    'input_ids': tokenized['input_ids'],  # List of lists (variable length)
-                    'attention_mask': tokenized['attention_mask'],
-                    'labels': np.argmax(row['labels']),
-                    'n_products': len(row['labels']) # I am not assuming labels are the same size, but 
-                })
+if __name__ == "__main__":
     
-
-    def preprocess_row(self, row):
-        product_results = row[ID_COLUMN]
-        product_results = [self.catalog_dict.get(product_results[i], {}) for i in range(len(product_results))]
-        n_products= len(product_results)
-        # I have decided to not pad this data here, but rather in the model forward pass
-        tokenized_row = self.tokenizer([row['query']]*n_products,product_results , 
-                                       padding=False, 
-                                       truncation=True, 
-                                       max_length=self.max_length, 
-                                       return_tensors=None)
-        return tokenized_row
-
-    def read_catalog(self, catalog_file):
-        df_catalog = pd.read_parquet(catalog_file)
-        return df_catalog.set_index(ID_COLUMN)['product_embed_description'].to_dict()
-
-
-    def save_preprocessed_rows(self, data, output_directory):
-        pass
-
-
-    
- 
-
-
-    def _write_record_batch(self, writer, record_batch):
-        pass
-
-
-    def flush_rows_to_shard(self, rows, shard_idx_ref):
-        pass
-
-
-
-
