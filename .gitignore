@@ -3,3 +3,22 @@ wines/
 *.parquet
 *.pdf
 parquet_processing.py
+
+
+# Byte-code files
+*.pyc
+__pycache__/
+
+# Virtual environment
+venv/
+.venv/
+
+# Editor/IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp

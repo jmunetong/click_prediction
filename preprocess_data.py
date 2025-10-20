@@ -6,11 +6,10 @@ import pyarrow.parquet as pq
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-RESULTS_COLUMN = "results"               # in the source: a LIST of product IDs per query
-WINE_ID_COLUMN = "WineID"          # in the catalog
-LABELS_COLUMN = "new_labels"       # one-hot per query (length = #candidates)
+RESULTS_COLUMN = "results"     # in the source: a LIST of product IDs per query
+WINE_ID_COLUMN = "WineID"        # in the catalog
+LABELS_COLUMN = "new_labels"      # one-hot per query (length = #candidates)
 QUERY_COLUMN = "query"
-
 FLUSH_EVERY = 2_000                # rows per write_batch
 PARQUET_COMPRESSION = "zstd"
 
