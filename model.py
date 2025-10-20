@@ -11,7 +11,7 @@ class CrossEncoderScorer(nn.Module):
     def forward(self, input_ids, attention_mask):
         # input_ids / attention_mask: [B*N, L]
         out = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-        # Use the first token's hidden state (RoBERTa CLS token at position 0)
+       
         cls = out.last_hidden_state[:, 0, :]          # [B*N, H]
         logits = self.head(cls).squeeze(-1)           # [B*N]
         return logits

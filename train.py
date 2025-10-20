@@ -3,7 +3,8 @@ import torch.nn.functional as F
 import torch
 import os
 from pathlib import Path
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import LambdaLR
+import math
 
 from dataset import ParquetDataset, collate_queries
 from model import CrossEncoderScorer
@@ -25,6 +26,15 @@ checkpoint_dir.mkdir(exist_ok=True)
 # Build dataset/data loader
 train_paths = ["preprocessed_click_train.parquet"]
 train_dataset = ParquetDataset(train_paths)
+
+# Get total samples for accurate scheduler calculation
+total_samples = train_dataset.get_total_samples()
+print(f"Total training samples: {total_samples}")
+estimated_steps_per_epoch = total_samples // BATCH_SIZE
+total_steps = NUM_EPOCHS * estimated_steps_per_epoch
+print(f"Estimated steps per epoch: {estimated_steps_per_epoch}")
+print(f"Total training steps: {total_steps}")
+
 train_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
@@ -71,15 +81,17 @@ optim = torch.optim.AdamW([
     {'params': head_params, 'lr': LEARNING_RATE * 5, 'weight_decay': 0.0}  # Higher LR for head
 ], lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
-# Learning rate scheduler with warmup
-# Estimate total steps (this is approximate for IterableDataset)
-estimated_steps_per_epoch = 1000  # Adjust based on your dataset size
-total_steps = NUM_EPOCHS * estimated_steps_per_epoch
+# Learning rate scheduler with warmup - using LambdaLR
+def lr_lambda(current_step):
+    if current_step < WARMUP_STEPS:
+        # Linear warmup
+        return float(current_step) / float(max(1, WARMUP_STEPS))
+    else:
+        # Cosine decay
+        progress = float(current_step - WARMUP_STEPS) / float(max(1, total_steps - WARMUP_STEPS))
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
 
-# Linear warmup + Cosine decay
-warmup_scheduler = LinearLR(optim, start_factor=0.1, end_factor=1.0, total_iters=WARMUP_STEPS)
-cosine_scheduler = CosineAnnealingLR(optim, T_max=total_steps - WARMUP_STEPS, eta_min=1e-7)
-scheduler = SequentialLR(optim, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[WARMUP_STEPS])
+scheduler = LambdaLR(optim, lr_lambda)
 
 # Tracking best model
 best_acc = 0.0
@@ -101,8 +113,12 @@ print(f"Gradient Clipping: {MAX_GRAD_NORM}")
 print("="*50)
 
 global_step = 0
+training_complete = False
 
 for epoch in range(NUM_EPOCHS):
+    if training_complete:
+        break
+        
     print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
     print("-" * 50)
     
@@ -113,6 +129,12 @@ for epoch in range(NUM_EPOCHS):
     batch_count = 0
     
     for batch_idx, batch in enumerate(train_loader):
+        # Check if we've reached total_steps
+        if global_step >= total_steps:
+            print(f"\nReached total_steps ({total_steps}). Stopping training.")
+            training_complete = True
+            break
+            
         input_ids = batch["input_ids"].to(device)
         attention = batch["attention_mask"].to(device)
         cand_mask = batch["candidate_mask"].to(device)
@@ -155,7 +177,7 @@ for epoch in range(NUM_EPOCHS):
 
         if global_step % LOG_INTERVAL == 0:
             batch_acc = correct / B
-            print(f"epoch {epoch + 1} | step {global_step} | batch {batch_idx} | "
+            print(f"epoch {epoch + 1} | step {global_step}/{total_steps} | batch {batch_idx} | "
                   f"loss {loss.item():.4f} | acc {batch_acc:.3f} | lr {current_lr:.2e}")
             
             # Save best model based on batch accuracy
@@ -176,26 +198,28 @@ for epoch in range(NUM_EPOCHS):
         
         global_step += 1
     
-    # Save checkpoint at end of each epoch
-    torch.save({
-        'epoch': epoch + 1,
-        'global_step': global_step,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optim.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'train_metrics': train_metrics,
-    }, last_checkpoint_path)
+    # Save checkpoint at end of each epoch (only if not already complete)
+    if not training_complete:
+        torch.save({
+            'epoch': epoch + 1,
+            'global_step': global_step,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optim.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'train_metrics': train_metrics,
+        }, last_checkpoint_path)
     
     # End of epoch summary
-    avg_epoch_loss = epoch_loss / batch_count
-    avg_epoch_acc = epoch_correct / epoch_total
-    print(f"\nEpoch {epoch + 1} Summary:")
-    print(f"  Batches processed: {batch_count}")
-    print(f"  Samples processed: {epoch_total}")
-    print(f"  Average Loss: {avg_epoch_loss:.4f}")
-    print(f"  Average Accuracy: {avg_epoch_acc:.3f}")
-    print(f"  Total Steps: {global_step}")
-    print(f"  Current LR: {current_lr:.2e}")
+    if batch_count > 0:
+        avg_epoch_loss = epoch_loss / batch_count
+        avg_epoch_acc = epoch_correct / epoch_total
+        print(f"\nEpoch {epoch + 1} Summary:")
+        print(f"  Batches processed: {batch_count}")
+        print(f"  Samples processed: {epoch_total}")
+        print(f"  Average Loss: {avg_epoch_loss:.4f}")
+        print(f"  Average Accuracy: {avg_epoch_acc:.3f}")
+        print(f"  Total Steps: {global_step}/{total_steps}")
+        print(f"  Current LR: {current_lr:.2e}")
 
 print("\n" + "="*50)
 print("Training completed!")
