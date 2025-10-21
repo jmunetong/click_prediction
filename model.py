@@ -1,17 +1,25 @@
+import torch
 import torch.nn as nn
 from transformers import AutoModel
 
 class CrossEncoderScorer(nn.Module):
-    def __init__(self, model_name="roberta-base"):
+    def __init__(self, model_name: str, load_in_4bit: bool = False):
         super().__init__()
-        self.backbone = AutoModel.from_pretrained(model_name)
-        hidden = self.backbone.config.hidden_size
-        self.head = nn.Linear(hidden, 1)   # 1 logit per pair
-
-    def forward(self, input_ids, attention_mask):
-        # input_ids / attention_mask: [B*N, L]
-        out = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-       
-        cls = out.last_hidden_state[:, 0, :]          # [B*N, H]
-        logits = self.head(cls).squeeze(-1)           # [B*N]
-        return logits
+        
+        if load_in_4bit:
+            from transformers import BitsAndBytesConfig
+            
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            self.encoder = AutoModel.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto"
+            )
+        else:
+            self.encoder = AutoModel.from_pretrained(model_name)
+        

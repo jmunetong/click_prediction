@@ -24,3 +24,4 @@ venv/
 *.tmp
 checkpoints/
 Miniconda3-latest-Linux-x86_64.sh
+.DS_Store
