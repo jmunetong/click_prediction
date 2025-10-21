@@ -147,7 +147,7 @@ class CrossEncoderScorer(nn.Module):
 def  get_model(model_name:str):
     models = {
         "cross_encoder": partial(CrossEncoderScorer, pool_type="cls"),
-        "cross_encoder_mean_pooling": partial(CrossEncoderScorer, pool_type="pooling"),
+        "cross_encoder_mean_pooling": partial(CrossEncoderScorer, pool_type="mean"),
         "cross_encoder_attention":  partial(CrossEncoderScorer, pool_type="attention"),
         }
     return models[model_name]

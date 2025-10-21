@@ -17,6 +17,7 @@ WARMUP_STEPS=500
 MAX_GRAD_NORM=1.0
 LOG_INTERVAL=50
 EVAL_INTERVAL=500
+MODEL_NAME="cross_encoder"
 
 # LoRA Configuration
 LORA_R=8
@@ -87,6 +88,7 @@ run_full_finetuning_fp16() {
 
     print_info "Training with FP16 mixed precision (AMP)..."
     python main.py \
+        --model_name $MODEL_NAME\
         --num_epochs $NUM_EPOCHS \
         --batch_size $BATCH_SIZE \
         --learning_rate $LEARNING_RATE \
