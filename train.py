@@ -1,15 +1,13 @@
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch
-import os
 from pathlib import Path
 from torch.optim.lr_scheduler import LambdaLR
 from torch.cuda.amp import autocast, GradScaler
 import math
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, TaskType
-from transformers import BitsAndBytesConfig
 
-from dataset import ParquetDataset, collate_queries
+
 from model import CrossEncoderScorer
 
 class Trainer:
