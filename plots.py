@@ -405,33 +405,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
 
-**Key changes:**
 
-1. ✅ **Save directory now includes training mode subdirectory**:
-   - Full Fine-tuning → `results/full_finetuning/`
-   - LoRA → `results/lora/`
-
-2. ✅ **Removed suffix from filenames** - Files now have clean names:
-   - `training_test_accuracy.png` (not `training_test_accuracy_lora.png`)
-   - `training_test_loss.png`
-   - `combined_plot.png`
-   - `step_level_plot.png`
-   - `metrics.json`
-
-3. ✅ **Directory structure**:
-```
-   results/
-   ├── full_finetuning/
-   │   ├── training_test_accuracy.png
-   │   ├── training_test_loss.png
-   │   ├── combined_plot.png
-   │   ├── step_level_plot.png
-   │   └── metrics.json
-   └── lora/
-       ├── training_test_accuracy.png
-       ├── training_test_loss.png
-       ├── combined_plot.png
-       ├── step_level_plot.png
-       └── metrics.json

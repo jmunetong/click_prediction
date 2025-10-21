@@ -182,6 +182,7 @@ class Trainer:
         
         with torch.no_grad():
             for batch in val_loader:
+                
                 input_ids = batch["input_ids"].to(self.device)
                 attention = batch["attention_mask"].to(self.device)
                 cand_mask = batch["candidate_mask"].to(self.device)
@@ -382,9 +383,14 @@ class Trainer:
             epoch_correct = 0
             epoch_total = 0
             batch_count = 0
+            i = 0
             
             for batch_idx, batch in enumerate(train_loader):
                 # Check if we've processed all training samples for this epoch
+                i +=1
+                if i == 5:
+                    training_complete = True
+                    break
                 if epoch_total >= total_samples:
                     print(f"\nCompleted epoch {epoch + 1} (processed {epoch_total} samples)")
                     break
@@ -469,8 +475,6 @@ class Trainer:
                 print(f"  Current LR: {current_lr:.2e}")
                 print(f"  Epoch Time: {self._format_time(epoch_time)} ({epoch_time:.2f}s)")
                 
-                # Run validation if provided
-         
                 val_acc, val_loss = self.validate(val_loader)
                 
                 # STORE VALIDATION METRICS (ALWAYS - FOR ALL EPOCHS)

@@ -1,6 +1,6 @@
 from dataset import ParquetDataset, collate_queries
 from train import Trainer
-from plot_results import load_checkpoint_and_plot
+from plots import load_checkpoint_and_plot
 from torch.utils.data import DataLoader
 
 
@@ -67,7 +67,6 @@ def main(args):
         checkpoint_dir=args.checkpoint_dir,
         use_amp=args.use_amp,
         use_lora=args.use_lora,
-        use_qlora=args.use_qlora,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
