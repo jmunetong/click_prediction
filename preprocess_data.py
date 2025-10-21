@@ -231,12 +231,12 @@ class DataPreprocessor:
 
 if __name__ == "__main__":
 
-    train_click = "click_train.parquet"
-    test_click = "click_test.parquet"
-    catalog = "catalog.parquet"
-    output_train = "preprocessed_click_train.parquet"
-    output_val = "preprocessed_click_val.parquet"
-    output_test = "preprocessed_click_test.parquet"
+    train_click = "data/click_train.parquet"
+    test_click = "data/click_test.parquet"
+    catalog = "data/catalog.parquet"
+    output_train = "data/preprocessed_click_train.parquet"
+    output_val = "data/preprocessed_click_val.parquet"
+    output_test = "data/preprocessed_click_test.parquet"
     
     # Process training data with 10% validation split
     print("="*60)
