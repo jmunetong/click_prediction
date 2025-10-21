@@ -2,6 +2,7 @@ from dataset import ParquetDataset, collate_queries
 from train import Trainer
 from plots import load_checkpoint_and_plot
 from torch.utils.data import DataLoader
+from model import get_model
 
 
 def main(args):
@@ -55,7 +56,7 @@ def main(args):
         lora_target_modules = [m.strip() for m in args.lora_target_modules.split(',')]
     
     # Initialize trainer
-    trainer = Trainer(
+    trainer = Trainer(model_name=args.model_name
         num_epochs=args.num_epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
@@ -119,6 +120,11 @@ if __name__ == "__main__":
         description="Click Prediction Training Pipeline - Always trains and plots",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+
+    # Model selection
+    parser.add_argument("--model_name", type=str, default="cross_encoder",
+                       choices=list(get_model("").keys()),
+                       help="Model name to use for training")
 
     # ========================================
     # TRAINING HYPERPARAMETERS

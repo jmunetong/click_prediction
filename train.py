@@ -11,11 +11,11 @@ import json
 import pandas as pd
 from peft import LoraConfig, get_peft_model, TaskType
 
-from model import CrossEncoderScorer
+from model import get_model
 
 class Trainer:
 
-    def __init__(self, num_epochs=3, 
+    def __init__(self,model_name, num_epochs=3, 
                  batch_size=16, learning_rate=2e-5, weight_decay=0.01,
                  warmup_steps=500, max_grad_norm=1.0, log_interval=50, 
                  eval_interval=500, checkpoint_dir="checkpoints", use_amp=True,
@@ -46,7 +46,7 @@ class Trainer:
             if use_amp:
                 print("Warning: Mixed precision disabled (not using CUDA)")
         
-        self.model = self._init_model(self.device)
+        self.model = self._init_model(model_name, self.device)
         
         # Update checkpoint paths based on LoRA usage
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -120,14 +120,11 @@ class Trainer:
         
         return model
 
-    def _init_model(self, device):
+    def _init_model(self, model_name, device):
+        model = get_model(model_name)("bert-base-uncased").to(device)
         if self.use_lora:
-            # Standard LoRA without quantization
-            model = CrossEncoderScorer("roberta-base").to(device)
             model = self._setup_lora(model)
-        else:
-            # Standard full fine-tuning
-            model = CrossEncoderScorer("roberta-base").to(device)
+       
         return model
     
     def _init_optimizer(self, model, total_steps):
@@ -182,7 +179,6 @@ class Trainer:
         
         with torch.no_grad():
             for batch in val_loader:
-                
                 input_ids = batch["input_ids"].to(self.device)
                 attention = batch["attention_mask"].to(self.device)
                 cand_mask = batch["candidate_mask"].to(self.device)
@@ -383,14 +379,9 @@ class Trainer:
             epoch_correct = 0
             epoch_total = 0
             batch_count = 0
-            i = 0
             
             for batch_idx, batch in enumerate(train_loader):
                 # Check if we've processed all training samples for this epoch
-                i +=1
-                if i == 5:
-                    training_complete = True
-                    break
                 if epoch_total >= total_samples:
                     print(f"\nCompleted epoch {epoch + 1} (processed {epoch_total} samples)")
                     break
@@ -528,14 +519,10 @@ class Trainer:
             print(f"Best validation accuracy: {self.best_val_acc:.4f}")
         else:
             print(f"Best training accuracy: {self.best_val_acc:.4f}")
-        print(f"Total steps: {global_step}")
         print("\nTiming Statistics:")
         print(f"  Total training time: {self._format_time(total_training_time)} ({total_training_time:.2f}s)")
         print(f"  Average time per epoch: {self._format_time(avg_epoch_time)} ({avg_epoch_time:.2f}s)")
-        if self.epoch_times:
-            print(f"  Fastest epoch: {self._format_time(min(self.epoch_times))} ({min(self.epoch_times):.2f}s)")
-            print(f"  Slowest epoch: {self._format_time(max(self.epoch_times))} ({max(self.epoch_times):.2f}s)")
-        print("="*50)
+    
         
         # Save all metrics to separate files
         self.save_metrics()
