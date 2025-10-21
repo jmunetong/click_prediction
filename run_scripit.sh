@@ -308,27 +308,45 @@ main() {
     EXPERIMENTS_RUN=0
     EXPERIMENTS_SUCCEEDED=0
     
-    # Run experiments
-    experiments=(
-        "run_full_finetuning_fp32"
-        "run_full_finetuning_fp16"
-        "run_lora"
-        "run_qlora"
-    )
+    # Run Experiment 1: Full Fine-tuning FP32
+    EXPERIMENTS_RUN=$((EXPERIMENTS_RUN + 1))
+    if run_full_finetuning_fp32; then
+        EXPERIMENTS_SUCCEEDED=$((EXPERIMENTS_SUCCEEDED + 1))
+    else
+        print_error "Experiment 1 failed: Full Fine-tuning FP32"
+        print_warning "Continuing with remaining experiments..."
+    fi
+    sleep 2
     
-    for exp_func in "${experiments[@]}"; do
-        EXPERIMENTS_RUN=$((EXPERIMENTS_RUN + 1))
-        
-        if $exp_func; then
-            EXPERIMENTS_SUCCEEDED=$((EXPERIMENTS_SUCCEEDED + 1))
-        else
-            print_error "Experiment failed: $exp_func"
-            print_warning "Continuing with remaining experiments..."
-        fi
-        
-        # Small delay between experiments
-        sleep 2
-    done
+    # Run Experiment 2: Full Fine-tuning FP16
+    EXPERIMENTS_RUN=$((EXPERIMENTS_RUN + 1))
+    if run_full_finetuning_fp16; then
+        EXPERIMENTS_SUCCEEDED=$((EXPERIMENTS_SUCCEEDED + 1))
+    else
+        print_error "Experiment 2 failed: Full Fine-tuning FP16"
+        print_warning "Continuing with remaining experiments..."
+    fi
+    sleep 2
+    
+    # Run Experiment 3: LoRA
+    EXPERIMENTS_RUN=$((EXPERIMENTS_RUN + 1))
+    if run_lora; then
+        EXPERIMENTS_SUCCEEDED=$((EXPERIMENTS_SUCCEEDED + 1))
+    else
+        print_error "Experiment 3 failed: LoRA"
+        print_warning "Continuing with remaining experiments..."
+    fi
+    sleep 2
+    
+    # Run Experiment 4: QLoRA
+    EXPERIMENTS_RUN=$((EXPERIMENTS_RUN + 1))
+    if run_qlora; then
+        EXPERIMENTS_SUCCEEDED=$((EXPERIMENTS_SUCCEEDED + 1))
+    else
+        print_error "Experiment 4 failed: QLoRA"
+        print_warning "Continuing with remaining experiments..."
+    fi
+    sleep 2
     
     # Generate summary
     generate_summary
@@ -365,7 +383,6 @@ main() {
         exit 1
     fi
 }
-
 # ============================================================================
 # SCRIPT EXECUTION
 # ============================================================================

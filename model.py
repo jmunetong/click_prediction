@@ -15,11 +15,36 @@ class CrossEncoderScorer(nn.Module):
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_use_double_quant=True,
             )
-            self.encoder = AutoModel.from_pretrained(
+            self.backbone = AutoModel.from_pretrained(
                 model_name,
                 quantization_config=bnb_config,
                 device_map="auto"
             )
         else:
-            self.encoder = AutoModel.from_pretrained(model_name)
+            self.backbone = AutoModel.from_pretrained(model_name)
         
+        # Get hidden size from the model config
+        hidden_size = self.backbone.config.hidden_size
+        
+        # Scoring head: maps CLS representation to a single score
+        self.head = nn.Linear(hidden_size, 1)
+    
+    def forward(self, input_ids, attention_mask):
+        """
+        Args:
+            input_ids: [B*N, L] tensor of token ids
+            attention_mask: [B*N, L] tensor of attention mask
+            
+        Returns:
+            logits: [B*N] tensor of scores
+        """
+        # Encode the input
+        out = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+       
+        # Use [CLS] token representation (first token)
+        cls = out.last_hidden_state[:, 0, :]  # [B*N, H]
+        
+        # Score each pair
+        logits = self.head(cls).squeeze(-1)   # [B*N]
+        
+        return logits

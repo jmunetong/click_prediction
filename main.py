@@ -208,18 +208,5 @@ if __name__ == "__main__":
                        help="Comma-separated list of module names to apply LoRA (e.g., 'query,value,key')")
 
     args = parser.parse_args()
-    
-    # Validate arguments
-    if not args.train and not args.plot:
-        parser.error("At least one of --train or --plot must be specified")
-    
-    if args.use_lora and args.use_qlora:
-        parser.error("Cannot use both --use_lora and --use_qlora. Choose one.")
-    
-    if args.plot and not args.train:
-        if not args.checkpoint_path:
-            parser.error("--checkpoint_path is required when using --plot without --train")
-        if args.test_acc is None or args.test_loss is None:
-            parser.error("--test_acc and --test_loss are required when using --plot without --train")
 
     main(args)
