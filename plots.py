@@ -46,7 +46,7 @@ def plot_training_results(
         test_acc: Test accuracy from click_test.parquet (REQUIRED for assignment)
         test_loss: Test loss from click_test.parquet (REQUIRED for assignment)
         save_dir: Directory to save plots
-        suffix: Suffix for filenames (e.g., "_lora", "_qlora")
+        suffix: Suffix for filenames (e.g., "_lora")
         step_train_losses: List of training losses per step (optional)
         step_train_accuracies: List of training accuracies per step (optional)
         step_numbers: List of step numbers (optional)
@@ -57,16 +57,20 @@ def plot_training_results(
         learning_rate: Learning rate used (optional)
     """
     save_dir = Path(save_dir)
-    save_dir.mkdir(exist_ok=True)
+    save_dir.mkdir(exist_ok=True, parents=True)
     
-    epochs = np.arange(1, len(epoch_train_accuracies) + 1)
+    # Ensure we use ALL epochs from the data
+    num_epochs_actual = len(epoch_train_accuracies)
+    epochs = np.arange(1, num_epochs_actual + 1)
     has_validation = epoch_val_accuracies is not None and len(epoch_val_accuracies) > 0
     
     print("\n" + "="*60)
     print("Generating plots...")
     print("="*60)
+    print(f"Save directory: {save_dir}")
     print(f"Training data source: click_train.parquet (preprocessed)")
     print(f"Test data source: click_test.parquet (preprocessed)")
+    print(f"Number of epochs to plot: {num_epochs_actual}")
     if test_acc is not None:
         print(f"Test accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
         if test_acc >= 0.40:
@@ -81,11 +85,11 @@ def plot_training_results(
     # ========================================
     fig, ax = plt.subplots(figsize=(12, 7))
     
-    # Plot training accuracy per epoch
+    # Plot training accuracy per epoch (ALL EPOCHS)
     ax.plot(epochs, epoch_train_accuracies, 'o-', linewidth=3, markersize=10,
             label='Training Accuracy (click_train.parquet)', color='#2E86AB')
     
-    # Add validation if available
+    # Add validation if available (ALL EPOCHS)
     if has_validation:
         ax.plot(epochs, epoch_val_accuracies, 's-', linewidth=2.5, markersize=9,
                 label='Validation Accuracy', color='#A23B72', alpha=0.8)
@@ -111,7 +115,7 @@ def plot_training_results(
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-    ax.set_title('Training and Test Accuracy\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Accuracy (All {num_epochs_actual} Epochs)\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -122,16 +126,16 @@ def plot_training_results(
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
     
     plt.tight_layout()
-    plt.savefig(save_dir / f'training_test_accuracy{suffix}.png', dpi=300, bbox_inches='tight')
-    print(f"✓ SAVED PRIMARY PLOT: {save_dir / f'training_test_accuracy{suffix}.png'}")
+    plt.savefig(save_dir / f'training_test_accuracy.png', dpi=300, bbox_inches='tight')
+    print(f"✓ SAVED PRIMARY PLOT: {save_dir / 'training_test_accuracy.png'}")
     plt.close()
     
     # ========================================
-    # Training and Test Loss
+    # Plot 2: Training and Test Loss
     # ========================================
     fig, ax = plt.subplots(figsize=(12, 7))
     
-    # Plot epoch-level losses
+    # Plot epoch-level losses (ALL EPOCHS)
     ax.plot(epochs, epoch_train_losses, 'o-', linewidth=3, markersize=10,
             label='Training Loss (click_train.parquet)', color='#2E86AB')
     
@@ -148,23 +152,23 @@ def plot_training_results(
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Loss', fontsize=14, fontweight='bold')
-    ax.set_title('Training and Test Loss\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Loss (All {num_epochs_actual} Epochs)\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
     ax.set_xticks(epochs)
     
     plt.tight_layout()
-    plt.savefig(save_dir / f'training_test_loss{suffix}.png', dpi=300, bbox_inches='tight')
-    print(f"✓ Saved: {save_dir / f'training_test_loss{suffix}.png'}")
+    plt.savefig(save_dir / 'training_test_loss.png', dpi=300, bbox_inches='tight')
+    print(f"✓ Saved: {save_dir / 'training_test_loss.png'}")
     plt.close()
     
     # ========================================
-    # Combined Plot (Loss and Accuracy side by side)
+    # Plot 3: Combined Plot (Loss and Accuracy side by side)
     # ========================================
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
     
-    # Loss subplot
+    # Loss subplot (ALL EPOCHS)
     ax1.plot(epochs, epoch_train_losses, 'o-', linewidth=2.5, markersize=9,
              label='Training Loss', color='#2E86AB')
     if has_validation:
@@ -182,7 +186,7 @@ def plot_training_results(
     ax1.grid(True, alpha=0.3, linestyle='--')
     ax1.set_xticks(epochs)
     
-    # Accuracy subplot
+    # Accuracy subplot (ALL EPOCHS)
     ax2.plot(epochs, epoch_train_accuracies, 'o-', linewidth=2.5, markersize=9,
              label='Training Accuracy', color='#2E86AB')
     if has_validation:
@@ -206,12 +210,12 @@ def plot_training_results(
     ax2.set_xticks(epochs)
     ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
     
-    fig.suptitle('Training vs Test Performance (click_train.parquet vs click_test.parquet)', 
+    fig.suptitle(f'Training vs Test Performance - All {num_epochs_actual} Epochs\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', y=1.02)
     
     plt.tight_layout()
-    plt.savefig(save_dir / f'combined_plot{suffix}.png', dpi=300, bbox_inches='tight')
-    print(f"✓ Saved: {save_dir / f'combined_plot{suffix}.png'}")
+    plt.savefig(save_dir / 'combined_plot.png', dpi=300, bbox_inches='tight')
+    print(f"✓ Saved: {save_dir / 'combined_plot.png'}")
     plt.close()
     
     # ========================================
@@ -259,96 +263,9 @@ def plot_training_results(
         ax2.set_ylim([0, 1.0])
         
         plt.tight_layout()
-        plt.savefig(save_dir / f'step_level_plot{suffix}.png', dpi=300, bbox_inches='tight')
-        print(f"✓ Saved: {save_dir / f'step_level_plot{suffix}.png'}")
+        plt.savefig(save_dir / 'step_level_plot.png', dpi=300, bbox_inches='tight')
+        print(f"✓ Saved: {save_dir / 'step_level_plot.png'}")
         plt.close()
-    
-    # ========================================
-    # Plot 5: Summary Table with Dataset Information
-    # ========================================
-    fig, ax = plt.subplots(figsize=(12, 7))
-    ax.axis('tight')
-    ax.axis('off')
-    
-    # Prepare table data
-    table_data = [
-        ['Metric', 'Value'],
-        ['', ''],  # Separator
-        ['DATASET INFORMATION', ''],
-        ['Training Dataset', 'click_train.parquet (preprocessed)'],
-        ['Test Dataset', 'click_test.parquet (preprocessed)'],
-        ['', ''],  # Separator
-        ['TRAINING RESULTS', ''],
-    ]
-    
-    if num_epochs is not None:
-        table_data.append(['Total Epochs', f'{num_epochs}'])
-    else:
-        table_data.append(['Total Epochs', f'{len(epoch_train_accuracies)}'])
-    
-    table_data.extend([
-        ['Final Train Loss', f'{epoch_train_losses[-1]:.4f}'],
-        ['Final Train Accuracy', f'{epoch_train_accuracies[-1]:.4f} ({epoch_train_accuracies[-1]*100:.2f}%)'],
-    ])
-    
-    if has_validation:
-        table_data.extend([
-            ['Final Val Loss', f'{epoch_val_losses[-1]:.4f}'],
-            ['Final Val Accuracy', f'{epoch_val_accuracies[-1]:.4f} ({epoch_val_accuracies[-1]*100:.2f}%)'],
-        ])
-        if best_val_acc is not None:
-            table_data.append(['Best Val Accuracy', f'{best_val_acc:.4f} ({best_val_acc*100:.2f}%)'])
-    
-    table_data.append(['', ''])  # Separator
-    table_data.append(['TEST RESULTS (click_test.parquet)', ''])
-    
-    if test_loss is not None:
-        table_data.append(['Test Loss', f'{test_loss:.4f}'])
-    if test_acc is not None:
-        meets_req = '✓ MEETS REQUIREMENT' if test_acc >= 0.40 else '⚠ Below expected'
-        table_data.append(['Test Accuracy', f'{test_acc:.4f} ({test_acc*100:.2f}%) {meets_req}'])
-        table_data.append(['Expected Threshold', '≥40%'])
-    
-    table_data.append(['', ''])  # Separator
-    table_data.append(['CONFIGURATION', ''])
-    if training_mode:
-        table_data.append(['Training Mode', training_mode])
-    if learning_rate is not None:
-        table_data.append(['Learning Rate', f'{learning_rate}'])
-    if batch_size is not None:
-        table_data.append(['Batch Size', f'{batch_size}'])
-    
-    table = ax.table(cellText=table_data, cellLoc='left', loc='center',
-                     colWidths=[0.5, 0.5])
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 1.8)
-    
-    # Style header row
-    for i in range(2):
-        table[(0, i)].set_facecolor('#2E86AB')
-        table[(0, i)].set_text_props(weight='bold', color='white')
-    
-    # Style section headers (rows with empty second column or section titles)
-    section_rows = [2, 6, 10, 15]  # Adjust based on actual row indices
-    for row_idx in section_rows:
-        if row_idx < len(table_data):
-            for j in range(2):
-                table[(row_idx, j)].set_facecolor('#A8DADC')
-                table[(row_idx, j)].set_text_props(weight='bold')
-    
-    # Alternate row colors for data rows
-    for i in range(1, len(table_data)):
-        if i not in section_rows and table_data[i][1] != '':
-            for j in range(2):
-                if i % 2 == 0:
-                    table[(i, j)].set_facecolor('#F1FAEE')
-    
-    plt.title('Training Summary: click_train.parquet vs click_test.parquet', 
-              fontsize=16, fontweight='bold', pad=20)
-    plt.savefig(save_dir / f'summary_table{suffix}.png', dpi=300, bbox_inches='tight')
-    print(f"✓ Saved: {save_dir / f'summary_table{suffix}.png'}")
-    plt.close()
     
     print("\n" + "="*60)
     print("All plots saved successfully!")
@@ -361,6 +278,8 @@ def plot_training_results(
             print("✓ Test accuracy meets the expected threshold of 40%")
         else:
             print(f"⚠ Test accuracy is below expected 40% (gap: {(0.40-test_acc)*100:.2f}%)")
+    
+    print(f"\n✓ Plotted all {num_epochs_actual} epochs")
 
 
 def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, save_dir="plots"):
@@ -371,12 +290,12 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         checkpoint_path: Path to checkpoint file
         test_acc: Test accuracy from click_test.parquet (REQUIRED)
         test_loss: Test loss from click_test.parquet (REQUIRED)
-        save_dir: Directory to save plots
+        save_dir: Base directory to save plots (will be appended with suffix)
     """
     print(f"\nLoading checkpoint from: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
     
-    # Extract metrics from checkpoint
+    # Extract metrics from checkpoint (ALWAYS USE ALL AVAILABLE EPOCHS)
     epoch_train_accuracies = checkpoint.get('epoch_train_accuracies', [])
     epoch_train_losses = checkpoint.get('epoch_train_losses', [])
     epoch_val_accuracies = checkpoint.get('epoch_val_accuracies', [])
@@ -388,31 +307,36 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
     
     # Determine training mode and suffix
     use_lora = checkpoint.get('use_lora', False)
-    use_qlora = checkpoint.get('use_qlora', False)
     
-    if use_qlora:
-        suffix = "_qlora"
-        training_mode = "QLoRA"
-    elif use_lora:
+    if use_lora:
         suffix = "_lora"
         training_mode = "LoRA"
     else:
         suffix = ""
         training_mode = "Full Fine-tuning"
     
+    # Create save directory with suffix
+    base_save_dir = Path(save_dir)
+    if suffix:
+        # If suffix exists (e.g., "_lora"), create subdirectory
+        actual_save_dir = base_save_dir / training_mode.lower().replace(" ", "_")
+    else:
+        # For full fine-tuning, use "full_finetuning" subdirectory
+        actual_save_dir = base_save_dir / "full_finetuning"
+    
     # Get other metadata
-    num_epochs = checkpoint.get('epoch', len(epoch_train_accuracies))
+    num_epochs = len(epoch_train_accuracies)  # Use actual number from data
     
     print(f"Training mode: {training_mode}")
-    print(f"Epochs completed: {num_epochs}")
-    print(f"Train accuracies per epoch: {len(epoch_train_accuracies)}")
-    print(f"Val accuracies per epoch: {len(epoch_val_accuracies)}")
+    print(f"Total epochs in checkpoint: {num_epochs}")
+    print(f"Train accuracies available: {len(epoch_train_accuracies)}")
+    print(f"Val accuracies available: {len(epoch_val_accuracies)}")
     
     if test_acc is None or test_loss is None:
         print("\n⚠ WARNING: Test accuracy and/or test loss not provided!")
         print("   For assignment requirements, you must provide test results from click_test.parquet")
     
-    # Create plots
+    # Create plots with ALL epochs
     plot_training_results(
         epoch_train_accuracies=epoch_train_accuracies,
         epoch_train_losses=epoch_train_losses,
@@ -420,8 +344,8 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         epoch_val_losses=epoch_val_losses if len(epoch_val_losses) > 0 else None,
         test_acc=test_acc,
         test_loss=test_loss,
-        save_dir=save_dir,
-        suffix=suffix,
+        save_dir=actual_save_dir,
+        suffix="",  # No suffix in filenames since directory already has it
         step_train_losses=step_train_losses,
         step_train_accuracies=step_train_accuracies,
         step_numbers=step_numbers,
@@ -430,13 +354,11 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         num_epochs=num_epochs,
     )
     
-    # Save metrics to JSON
-    results_dir = Path(save_dir).parent / "results"
-    results_dir.mkdir(exist_ok=True)
-    
+    # Save metrics to JSON in the same directory
     metrics = {
         'training_dataset': 'click_train.parquet (preprocessed)',
         'test_dataset': 'click_test.parquet (preprocessed)',
+        'num_epochs': num_epochs,
         'epoch_train_accuracies': epoch_train_accuracies,
         'epoch_train_losses': epoch_train_losses,
         'epoch_val_accuracies': epoch_val_accuracies,
@@ -446,13 +368,12 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         'test_loss': test_loss,
         'meets_40_percent_requirement': test_acc >= 0.40 if test_acc is not None else None,
         'training_mode': training_mode,
-        'num_epochs': num_epochs,
     }
     
-    metrics_file = results_dir / f'metrics{suffix}.json'
+    metrics_file = actual_save_dir / 'metrics.json'
     with open(metrics_file, 'w') as f:
         json.dump(metrics, f, indent=2)
-    print(f"\n Metrics saved to: {metrics_file}")
+    print(f"\n✓ Metrics saved to: {metrics_file}")
 
 
 def main():
@@ -464,13 +385,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument('--checkpoint_path', type=str, required=True,
-                       help='Path to checkpoint file (e.g., checkpoints/best_model.pt)')
+                       help='Path to checkpoint file (e.g., checkpoints/last_model.pt)')
     parser.add_argument('--test_acc', type=float, required=True,
                        help='Test accuracy from click_test.parquet (REQUIRED)')
     parser.add_argument('--test_loss', type=float, required=True,
                        help='Test loss from click_test.parquet (REQUIRED)')
-    parser.add_argument('--save_dir', type=str, default='plots',
-                       help='Directory to save plots (default: plots)')
+    parser.add_argument('--save_dir', type=str, default='results',
+                       help='Base directory to save plots (default: results)')
     
     args = parser.parse_args()
     
@@ -484,3 +405,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+**Key changes:**
+
+1. ✅ **Save directory now includes training mode subdirectory**:
+   - Full Fine-tuning → `results/full_finetuning/`
+   - LoRA → `results/lora/`
+
+2. ✅ **Removed suffix from filenames** - Files now have clean names:
+   - `training_test_accuracy.png` (not `training_test_accuracy_lora.png`)
+   - `training_test_loss.png`
+   - `combined_plot.png`
+   - `step_level_plot.png`
+   - `metrics.json`
+
+3. ✅ **Directory structure**:
+```
+   results/
+   ├── full_finetuning/
+   │   ├── training_test_accuracy.png
+   │   ├── training_test_loss.png
+   │   ├── combined_plot.png
+   │   ├── step_level_plot.png
+   │   └── metrics.json
+   └── lora/
+       ├── training_test_accuracy.png
+       ├── training_test_loss.png
+       ├── combined_plot.png
+       ├── step_level_plot.png
+       └── metrics.json

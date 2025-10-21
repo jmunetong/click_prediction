@@ -3,10 +3,13 @@ import torch.nn.functional as F
 import torch
 from pathlib import Path
 from torch.optim.lr_scheduler import LambdaLR
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast
+from torch.cuda.amp import GradScaler
 import math
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, TaskType
-
+import time
+import json
+import pandas as pd
+from peft import LoraConfig, get_peft_model, TaskType
 
 from model import CrossEncoderScorer
 
@@ -16,7 +19,7 @@ class Trainer:
                  batch_size=16, learning_rate=2e-5, weight_decay=0.01,
                  warmup_steps=500, max_grad_norm=1.0, log_interval=50, 
                  eval_interval=500, checkpoint_dir="checkpoints", use_amp=True,
-                 use_lora=False, use_qlora=False, lora_r=8, lora_alpha=16, 
+                 use_lora=False, lora_r=8, lora_alpha=16, 
                  lora_dropout=0.1, lora_target_modules=None):
         
         self.num_epochs = num_epochs
@@ -29,17 +32,12 @@ class Trainer:
         self.eval_interval = eval_interval
         self.device = self._get_device()
         
-        # LoRA/QLoRA configuration
+        # LoRA configuration (QLoRA removed)
         self.use_lora = use_lora
-        self.use_qlora = use_qlora
         self.lora_r = lora_r
         self.lora_alpha = lora_alpha
         self.lora_dropout = lora_dropout
         self.lora_target_modules = lora_target_modules or ["query", "value"]  # Default for RoBERTa
-        
-        # Validate LoRA/QLoRA settings
-        if use_lora and use_qlora:
-            raise ValueError("Cannot use both LoRA and QLoRA. Choose one.")
         
         # Mixed precision setup
         self.use_amp = use_amp
@@ -47,23 +45,19 @@ class Trainer:
             self.use_amp = False
             if use_amp:
                 print("Warning: Mixed precision disabled (not using CUDA)")
-            if use_qlora:
-                raise ValueError("QLoRA requires CUDA device")
         
         self.model = self._init_model(self.device)
         
-        # Update checkpoint paths based on LoRA/QLoRA usage
+        # Update checkpoint paths based on LoRA usage
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(exist_ok=True)
         
-        suffix = ""
-        if self.use_qlora:
-            suffix = "_qlora"
-        elif self.use_lora:
-            suffix = "_lora"
+        suffix = "_lora" if self.use_lora else ""
         
         self.best_model_path = self.checkpoint_dir / f"best_model{suffix}.pt"
         self.last_checkpoint_path = self.checkpoint_dir / f"last_model{suffix}.pt"
+        self.metrics_path = self.checkpoint_dir / f"training_metrics{suffix}.json"
+        self.metrics_parquet_path = self.checkpoint_dir / f"training_metrics{suffix}.parquet"
         
         # Will be initialized in run_train when we know total_steps
         self.optim = None
@@ -81,6 +75,9 @@ class Trainer:
         self.step_train_losses = []
         self.step_train_accuracies = []
         self.step_numbers = []
+        
+        # Time tracking
+        self.epoch_times = []
 
     def _get_device(self):
         if torch.backends.mps.is_available():
@@ -122,67 +119,23 @@ class Trainer:
         print("="*50 + "\n")
         
         return model
-    
-    def _setup_qlora(self, model):
-        """Configure and apply QLoRA (4-bit quantization + LoRA) to the model"""
-        print("\n" + "="*50)
-        print("Configuring QLoRA...")
-        print("="*50)
-        
-        # First, prepare model for k-bit training
-        model = prepare_model_for_kbit_training(model)
-        
-        # Configure LoRA
-        lora_config = LoraConfig(
-            r=self.lora_r,
-            lora_alpha=self.lora_alpha,
-            target_modules=self.lora_target_modules,
-            lora_dropout=self.lora_dropout,
-            bias="none",
-            task_type=TaskType.FEATURE_EXTRACTION
-        )
-        
-        model = get_peft_model(model, lora_config)
-        
-        # Print trainable parameters
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in model.parameters())
-        
-        print(f"QLoRA Configuration:")
-        print(f"  Quantization: 4-bit")
-        print(f"  r: {self.lora_r}")
-        print(f"  alpha: {self.lora_alpha}")
-        print(f"  dropout: {self.lora_dropout}")
-        print(f"  target_modules: {self.lora_target_modules}")
-        print(f"Trainable params: {trainable_params:,} / {total_params:,} "
-              f"({100 * trainable_params / total_params:.2f}%)")
-        print("="*50 + "\n")
-        
-        return model
 
     def _init_model(self, device):
-        if self.use_qlora:
-            # For QLoRA, load model with quantization config
-            print("Loading model with 4-bit quantization for QLoRA...")
-            # For now, we create the model and then apply QLoRA
-            model = CrossEncoderScorer("roberta-base", load_in_4bit=self.use_qlora).to(device)
-            model = self._setup_qlora(model)
-        elif self.use_lora:
+        if self.use_lora:
             # Standard LoRA without quantization
             model = CrossEncoderScorer("roberta-base").to(device)
             model = self._setup_lora(model)
         else:
             # Standard full fine-tuning
             model = CrossEncoderScorer("roberta-base").to(device)
-        
         return model
     
     def _init_optimizer(self, model, total_steps):
-        # Get trainable parameters only (important for LoRA/QLoRA)
+        # Get trainable parameters only (important for LoRA)
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         
-        if self.use_lora or self.use_qlora:
-            # For LoRA/QLoRA, only optimize the LoRA parameters
+        if self.use_lora:
+            # For LoRA, only optimize the LoRA parameters
             optim = torch.optim.AdamW(
                 trainable_params,
                 lr=self.learning_rate,
@@ -194,7 +147,7 @@ class Trainer:
             encoder_params = []
             head_params = []
             for name, param in model.named_parameters():
-                if 'encoder' in name:
+                if 'backbone' in name:
                     encoder_params.append(param)
                 else:
                     head_params.append(param)
@@ -239,7 +192,7 @@ class Trainer:
                 attention_flat = attention.reshape(B * N, L)
 
                 # Use autocast for validation too
-                with autocast(enabled=self.use_amp):
+                with autocast(device_type='cuda', enabled=self.use_amp):
                     logits_flat = self.model(input_ids_flat, attention_flat)
                     logits = logits_flat.view(B, N)
                     logits = logits.masked_fill(~cand_mask, float("-inf"))
@@ -287,16 +240,103 @@ class Trainer:
             'step_train_accuracies': self.step_train_accuracies,
             'step_numbers': self.step_numbers,
             'best_val_acc': self.best_val_acc,
+            'epoch_times': self.epoch_times,
         }
     
+    def save_metrics(self):
+        """Save all training metrics to JSON and Parquet files"""
+        print("\n" + "="*50)
+        print("Saving training metrics...")
+        print("="*50)
+        
+        # Determine training mode (QLoRA removed)
+        training_mode = "LoRA" if self.use_lora else "Full Fine-tuning"
+        
+        # Create metrics dictionary
+        metrics_dict = {
+            'training_mode': training_mode,
+            'num_epochs': len(self.epoch_train_accuracies),
+            'batch_size': self.batch_size,
+            'learning_rate': self.learning_rate,
+            'weight_decay': self.weight_decay,
+            'warmup_steps': self.warmup_steps,
+            'use_amp': self.use_amp,
+            'use_lora': self.use_lora,
+            'epoch_train_accuracies': self.epoch_train_accuracies,
+            'epoch_train_losses': self.epoch_train_losses,
+            'epoch_val_accuracies': self.epoch_val_accuracies,
+            'epoch_val_losses': self.epoch_val_losses,
+            'best_val_acc': self.best_val_acc,
+            'epoch_times': self.epoch_times,
+            'total_training_time': sum(self.epoch_times) if self.epoch_times else 0,
+            'avg_epoch_time': sum(self.epoch_times) / len(self.epoch_times) if self.epoch_times else 0,
+        }
+        
+        # Save to JSON
+        with open(self.metrics_path, 'w') as f:
+            json.dump(metrics_dict, f, indent=2)
+        print(f"✓ Saved metrics to JSON: {self.metrics_path}")
+        
+        # Save epoch-level metrics to Parquet
+        epochs = list(range(1, len(self.epoch_train_accuracies) + 1))
+        
+        df_data = {
+            'epoch': epochs,
+            'train_accuracy': self.epoch_train_accuracies,
+            'train_loss': self.epoch_train_losses,
+            'training_mode': [training_mode] * len(epochs),
+            'dataset_train': ['click_train.parquet'] * len(epochs),
+        }
+        
+        # Add validation metrics if available
+        if self.epoch_val_accuracies:
+            df_data['val_accuracy'] = self.epoch_val_accuracies
+            df_data['val_loss'] = self.epoch_val_losses
+        
+        # Add timing metrics if available
+        if self.epoch_times:
+            df_data['epoch_time_seconds'] = self.epoch_times
+        
+        df_metrics = pd.DataFrame(df_data)
+        df_metrics.to_parquet(self.metrics_parquet_path, index=False, engine='pyarrow')
+        print(f"✓ Saved epoch metrics to Parquet: {self.metrics_parquet_path}")
+        
+        # Save step-level metrics to Parquet if available
+        if self.step_train_losses and len(self.step_train_losses) > 0:
+            step_parquet_path = self.checkpoint_dir / f"step_metrics{'.lora' if self.use_lora else ''}.parquet"
+            df_steps = pd.DataFrame({
+                'step': self.step_numbers,
+                'train_loss': self.step_train_losses,
+                'train_accuracy': self.step_train_accuracies,
+                'training_mode': [training_mode] * len(self.step_numbers),
+                'dataset': ['click_train.parquet'] * len(self.step_numbers),
+            })
+            df_steps.to_parquet(step_parquet_path, index=False, engine='pyarrow')
+            print(f"✓ Saved step metrics to Parquet: {step_parquet_path}")
+        
+        print("="*50)
+    
     def save_lora_adapters(self, path):
-        """Save only LoRA adapters (for LoRA/QLoRA models)"""
-        if not (self.use_lora or self.use_qlora):
-            print("Model is not using LoRA/QLoRA. Use standard checkpoint saving.")
+        """Save only LoRA adapters (for LoRA models)"""
+        if not self.use_lora:
+            print("Model is not using LoRA. Use standard checkpoint saving.")
             return
         
         self.model.save_pretrained(path)
         print(f"LoRA adapters saved to {path}")
+    
+    def _format_time(self, seconds):
+        """Format seconds into human-readable string"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
     
     def run_train(self, train_dataset, train_loader, val_loader=None):
         # Get total samples for accurate scheduler calculation
@@ -308,9 +348,7 @@ class Trainer:
         print(f"Total training steps: {total_steps}")
         print(f"Mixed Precision: {'Enabled' if self.use_amp else 'Disabled'}")
         
-        if self.use_qlora:
-            print(f"Training Mode: QLoRA (4-bit quantization + LoRA)")
-        elif self.use_lora:
+        if self.use_lora:
             print(f"Training Mode: LoRA")
         else:
             print(f"Training Mode: Full Fine-tuning")
@@ -327,6 +365,7 @@ class Trainer:
 
         global_step = 0
         training_complete = False
+        total_training_time = 0.0
 
         for epoch in range(self.num_epochs):
             if training_complete:
@@ -334,6 +373,9 @@ class Trainer:
 
             print(f"\nEpoch {epoch + 1}/{self.num_epochs}")
             print("-" * 50)
+
+            # Start epoch timer
+            epoch_start_time = time.time()
 
             self.model.train()
             epoch_loss = 0.0
@@ -357,7 +399,7 @@ class Trainer:
                 attention_flat = attention.reshape(B * N, L)
 
                 # Forward pass with autocast
-                with autocast(enabled=self.use_amp and not self.use_qlora):  # Disable AMP for QLoRA
+                with autocast(device_type='cuda', enabled=self.use_amp):
                     logits_flat = self.model(input_ids_flat, attention_flat)
                     logits = logits_flat.view(B, N)
                     logits = logits.masked_fill(~cand_mask, float("-inf"))
@@ -366,7 +408,7 @@ class Trainer:
                 # Backward pass with gradient scaling
                 self.optim.zero_grad(set_to_none=True)
                 
-                if self.use_amp and not self.use_qlora:
+                if self.use_amp:
                     self.scaler.scale(loss).backward()
                     self.scaler.unscale_(self.optim)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
@@ -405,12 +447,17 @@ class Trainer:
                 
                 global_step += 1
             
+            # End epoch timer
+            epoch_time = time.time() - epoch_start_time
+            self.epoch_times.append(epoch_time)
+            total_training_time += epoch_time
+            
             # End of epoch: compute metrics and validate
             if batch_count > 0:
                 avg_epoch_loss = epoch_loss / batch_count
                 avg_epoch_acc = epoch_correct / epoch_total
                 
-                # STORE EPOCH-LEVEL METRICS
+                # STORE EPOCH-LEVEL METRICS (ALWAYS - FOR ALL EPOCHS)
                 self.epoch_train_accuracies.append(avg_epoch_acc)
                 self.epoch_train_losses.append(avg_epoch_loss)
                 
@@ -420,106 +467,57 @@ class Trainer:
                 print(f"  Average Loss: {avg_epoch_loss:.4f}")
                 print(f"  Average Accuracy: {avg_epoch_acc:.3f}")
                 print(f"  Current LR: {current_lr:.2e}")
+                print(f"  Epoch Time: {self._format_time(epoch_time)} ({epoch_time:.2f}s)")
                 
                 # Run validation if provided
-                if val_loader is not None:
-                    val_acc, val_loss = self.validate(val_loader)
+         
+                val_acc, val_loss = self.validate(val_loader)
+                
+                # STORE VALIDATION METRICS (ALWAYS - FOR ALL EPOCHS)
+                self.epoch_val_accuracies.append(val_acc)
+                self.epoch_val_losses.append(val_loss)
+                
+                # Save best model based on validation accuracy
+                if val_acc > self.best_val_acc:
+                    self.best_val_acc = val_acc
                     
-                    # STORE VALIDATION METRICS
-                    self.epoch_val_accuracies.append(val_acc)
-                    self.epoch_val_losses.append(val_loss)
+                    # Save checkpoint with FULL history
+                    checkpoint = {
+                        'epoch': epoch + 1,
+                        'global_step': global_step,
+                        'model_state_dict': self.model.state_dict(),
+                        'optimizer_state_dict': self.optim.state_dict(),
+                        'scheduler_state_dict': self.scheduler.state_dict(),
+                        'train_accuracy': avg_epoch_acc,
+                        'train_loss': avg_epoch_loss,
+                        'val_accuracy': val_acc,
+                        'val_loss': val_loss,
+                        'epoch_train_accuracies': self.epoch_train_accuracies,  # ALL epochs
+                        'epoch_train_losses': self.epoch_train_losses,          # ALL epochs
+                        'epoch_val_accuracies': self.epoch_val_accuracies,      # ALL epochs
+                        'epoch_val_losses': self.epoch_val_losses,              # ALL epochs
+                        'step_train_losses': self.step_train_losses,
+                        'step_train_accuracies': self.step_train_accuracies,
+                        'step_numbers': self.step_numbers,
+                        'epoch_times': self.epoch_times,
+                        'use_lora': self.use_lora,
+                    }
                     
-                    # Save best model based on validation accuracy
-                    if val_acc > self.best_val_acc:
-                        self.best_val_acc = val_acc
-                        
-                        # Save checkpoint
-                        checkpoint = {
-                            'epoch': epoch + 1,
-                            'global_step': global_step,
-                            'model_state_dict': self.model.state_dict(),
-                            'optimizer_state_dict': self.optim.state_dict(),
-                            'scheduler_state_dict': self.scheduler.state_dict(),
-                            'train_accuracy': avg_epoch_acc,
-                            'train_loss': avg_epoch_loss,
-                            'val_accuracy': val_acc,
-                            'val_loss': val_loss,
-                            'epoch_train_accuracies': self.epoch_train_accuracies,
-                            'epoch_train_losses': self.epoch_train_losses,
-                            'epoch_val_accuracies': self.epoch_val_accuracies,
-                            'epoch_val_losses': self.epoch_val_losses,
-                            'step_train_losses': self.step_train_losses,
-                            'step_train_accuracies': self.step_train_accuracies,
-                            'step_numbers': self.step_numbers,
-                            'use_lora': self.use_lora,
-                            'use_qlora': self.use_qlora,
-                        }
-                        
-                        if not self.use_qlora:
-                            checkpoint['scaler_state_dict'] = self.scaler.state_dict()
-                        
-                        torch.save(checkpoint, self.best_model_path)
-                        print(f"  → New best model saved! val_acc={val_acc:.4f}")
-                        
-                        # Also save LoRA adapters separately if using LoRA/QLoRA
-                        if self.use_lora or self.use_qlora:
-                            adapter_path = self.checkpoint_dir / f"best_lora_adapters"
-                            self.save_lora_adapters(adapter_path)
-                else:
-                    # If no validation, save based on training accuracy
-                    if avg_epoch_acc > self.best_val_acc:
-                        self.best_val_acc = avg_epoch_acc
-                        
-                        checkpoint = {
-                            'epoch': epoch + 1,
-                            'global_step': global_step,
-                            'model_state_dict': self.model.state_dict(),
-                            'optimizer_state_dict': self.optim.state_dict(),
-                            'scheduler_state_dict': self.scheduler.state_dict(),
-                            'train_accuracy': avg_epoch_acc,
-                            'train_loss': avg_epoch_loss,
-                            'epoch_train_accuracies': self.epoch_train_accuracies,
-                            'epoch_train_losses': self.epoch_train_losses,
-                            'step_train_losses': self.step_train_losses,
-                            'step_train_accuracies': self.step_train_accuracies,
-                            'step_numbers': self.step_numbers,
-                            'use_lora': self.use_lora,
-                            'use_qlora': self.use_qlora,
-                        }
-                        
-                        if not self.use_qlora:
-                            checkpoint['scaler_state_dict'] = self.scaler.state_dict()
-                        
-                        torch.save(checkpoint, self.best_model_path)
-                        print(f"  → New best model saved! train_acc={avg_epoch_acc:.4f}")
-                        
-                        if self.use_lora or self.use_qlora:
-                            adapter_path = self.checkpoint_dir / f"best_lora_adapters"
-                            self.save_lora_adapters(adapter_path)
+                    if self.use_amp:
+                        checkpoint['scaler_state_dict'] = self.scaler.state_dict()
+                    
+                    torch.save(checkpoint, self.best_model_path)
+                    print(f"  → New best model saved! val_acc={val_acc:.4f}")
+                    
+                    # Also save LoRA adapters separately if using LoRA
+                    if self.use_lora:
+                        adapter_path = self.checkpoint_dir / f"best_lora_adapters"
+                        self.save_lora_adapters(adapter_path)
                 
-                # Save last checkpoint
-                last_checkpoint = {
-                    'epoch': epoch + 1,
-                    'global_step': global_step,
-                    'model_state_dict': self.model.state_dict(),
-                    'optimizer_state_dict': self.optim.state_dict(),
-                    'scheduler_state_dict': self.scheduler.state_dict(),
-                    'epoch_train_accuracies': self.epoch_train_accuracies,
-                    'epoch_train_losses': self.epoch_train_losses,
-                    'epoch_val_accuracies': self.epoch_val_accuracies,
-                    'epoch_val_losses': self.epoch_val_losses,
-                    'step_train_losses': self.step_train_losses,
-                    'step_train_accuracies': self.step_train_accuracies,
-                    'step_numbers': self.step_numbers,
-                    'use_lora': self.use_lora,
-                    'use_qlora': self.use_qlora,
-                }
-                
-                if not self.use_qlora:
-                    last_checkpoint['scaler_state_dict'] = self.scaler.state_dict()
-                
-                torch.save(last_checkpoint, self.last_checkpoint_path)
 
+        # Calculate timing statistics
+        avg_epoch_time = total_training_time / len(self.epoch_times) if self.epoch_times else 0
+        
         print("\n" + "="*50)
         print("Training completed!")
         if val_loader is not None:
@@ -527,7 +525,16 @@ class Trainer:
         else:
             print(f"Best training accuracy: {self.best_val_acc:.4f}")
         print(f"Total steps: {global_step}")
+        print("\nTiming Statistics:")
+        print(f"  Total training time: {self._format_time(total_training_time)} ({total_training_time:.2f}s)")
+        print(f"  Average time per epoch: {self._format_time(avg_epoch_time)} ({avg_epoch_time:.2f}s)")
+        if self.epoch_times:
+            print(f"  Fastest epoch: {self._format_time(min(self.epoch_times))} ({min(self.epoch_times):.2f}s)")
+            print(f"  Slowest epoch: {self._format_time(max(self.epoch_times))} ({max(self.epoch_times):.2f}s)")
         print("="*50)
+        
+        # Save all metrics to separate files
+        self.save_metrics()
         
         # Return comprehensive metrics
         return self.get_metrics()

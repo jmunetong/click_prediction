@@ -1,6 +1,6 @@
 from dataset import ParquetDataset, collate_queries
 from train import Trainer
-from plots import load_checkpoint_and_plot
+from plot_results import load_checkpoint_and_plot
 from torch.utils.data import DataLoader
 
 
@@ -9,6 +9,14 @@ def main(args):
     train_data_path = 'data/preprocessed_click_train.parquet'
     test_data_path = 'data/preprocessed_click_test.parquet'
     val_data_path = 'data/preprocessed_click_val.parquet'
+
+    print("="*60)
+    print("CLICK PREDICTION TRAINING PIPELINE")
+    print("="*60)
+    print(f"Training dataset: {train_data_path}")
+    print(f"Validation dataset: {val_data_path}")
+    print(f"Test dataset: {test_data_path}")
+    print("="*60)
 
     # Create datasets
     train_dataset = ParquetDataset([train_data_path])
@@ -41,123 +49,77 @@ def main(args):
         persistent_workers=True,
     )
 
-    # ========================================
-    # PLOTTING ONLY MODE
-    # ========================================
-    if args.plot and not args.train:
-        if not args.checkpoint_path:
-            raise ValueError("--checkpoint_path is required when using --plot")
-        if args.test_acc is None or args.test_loss is None:
-            raise ValueError("--test_acc and --test_loss are required when using --plot")
-        
-        print("="*60)
-        print("PLOTTING MODE")
-        print("="*60)
-        load_checkpoint_and_plot(
-            checkpoint_path=args.checkpoint_path,
-            test_acc=args.test_acc,
-            test_loss=args.test_loss,
-            save_dir="results"
-        )
-        return
-
-    # ========================================
-    # TRAINING MODE
-    # ========================================
-    if args.train:
-        print("="*60)
-        print("TRAINING MODE")
-        print("="*60)
-        print(f"Training dataset: {train_data_path}")
-        print(f"Validation dataset: {val_data_path}")
-        print(f"Test dataset: {test_data_path}")
-        print("="*60)
-        
-        # Parse LoRA target modules if provided
-        lora_target_modules = None
-        if args.lora_target_modules:
-            lora_target_modules = [m.strip() for m in args.lora_target_modules.split(',')]
-        
-        # Initialize trainer with all arguments from argparse
-        trainer = Trainer(
-            num_epochs=args.num_epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            weight_decay=args.weight_decay,
-            warmup_steps=args.warmup_steps,
-            max_grad_norm=args.max_grad_norm,
-            log_interval=args.log_interval,
-            eval_interval=args.eval_interval,
-            checkpoint_dir=args.checkpoint_dir,
-            use_amp=args.use_amp,
-            use_lora=args.use_lora,
-            use_qlora=args.use_qlora,
-            lora_r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            lora_target_modules=lora_target_modules
-        )
-        
-        # Run training
-        train_metrics = trainer.run_train(train_dataset, train_loader, val_loader=val_loader)
-        
-        # Test on test set
-        print("\n" + "="*60)
-        print("TESTING ON click_test.parquet")
-        print("="*60)
-        test_acc, test_loss = trainer.test(test_loader)
-        
-        print(f"\nFinal Test Accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
-        print(f"Final Test Loss: {test_loss:.4f}")
-        print(f"Meets 40% requirement: {'YES ✓' if test_acc >= 0.40 else 'NO ⚠'}")
-        
-        # Generate plots if requested
-        if args.plot:
-            print("\n" + "="*60)
-            print("GENERATING PLOTS")
-            print("="*60)
-            load_checkpoint_and_plot(
-                checkpoint_path=str(trainer.best_model_path),
-                test_acc=test_acc,
-                test_loss=test_loss,
-                save_dir="results"
-            )
-        
-        print("\n" + "="*60)
-        print("TRAINING COMPLETE!")
-        print("="*60)
-        print(f"✓ Best model saved to: {trainer.best_model_path}")
-        print(f"✓ Test accuracy: {test_acc:.4f}")
-        if args.plot:
-            print(f"✓ Plots saved to: results/")
-        print("="*60)
+    # Parse LoRA target modules if provided
+    lora_target_modules = None
+    if args.lora_target_modules:
+        lora_target_modules = [m.strip() for m in args.lora_target_modules.split(',')]
+    
+    # Initialize trainer
+    trainer = Trainer(
+        num_epochs=args.num_epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        warmup_steps=args.warmup_steps,
+        max_grad_norm=args.max_grad_norm,
+        log_interval=args.log_interval,
+        eval_interval=args.eval_interval,
+        checkpoint_dir=args.checkpoint_dir,
+        use_amp=args.use_amp,
+        use_lora=args.use_lora,
+        use_qlora=args.use_qlora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        lora_target_modules=lora_target_modules
+    )
+    
+    # Run training
+    print("\n" + "="*60)
+    print("STEP 1: TRAINING")
+    print("="*60)
+    train_metrics = trainer.run_train(train_dataset, train_loader, val_loader=val_loader)
+    
+    # Test on test set
+    print("\n" + "="*60)
+    print("STEP 2: TESTING (click_test.parquet)")
+    print("="*60)
+    test_acc, test_loss = trainer.test(test_loader)
+    
+    print(f"\nFinal Test Accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
+    print(f"Final Test Loss: {test_loss:.4f}")
+    print(f"Meets 40% requirement: {'YES ✓' if test_acc >= 0.40 else 'NO ⚠'}")
+    
+    # Generate plots
+    print("\n" + "="*60)
+    print("STEP 3: GENERATING PLOTS")
+    print("="*60)
+    load_checkpoint_and_plot(
+        checkpoint_path=str(trainer.best_model_path),
+        test_acc=test_acc,
+        test_loss=test_loss,
+        save_dir="results"
+    )
+    
+    # Final summary
+    print("\n" + "="*60)
+    print("PIPELINE COMPLETE!")
+    print("="*60)
+    print(f"Best model: {trainer.best_model_path}")
+    print(f"Test accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
+    print(f"Test loss: {test_loss:.4f}")
+    print(f"Plots saved to: results/")
+    print(f"Parquet data: results/training_results*.parquet")
+    print("="*60)
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Click Prediction Training and Evaluation",
+        description="Click Prediction Training Pipeline - Always trains and plots",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
-    # ========================================
-    # MODE FLAGS
-    # ========================================
-    parser.add_argument("--train", action="store_true", 
-                       help="Flag to trigger training")
-    parser.add_argument("--plot", action="store_true", 
-                       help="Flag to trigger plotting")
-    
-    # ========================================
-    # PLOTTING ARGUMENTS
-    # ========================================
-    parser.add_argument("--checkpoint_path", type=str, default="", 
-                       help="Path to model checkpoint for plotting")
-    parser.add_argument("--test_acc", type=float, default=None, 
-                       help="Test accuracy for plotting")
-    parser.add_argument("--test_loss", type=float, default=None, 
-                       help="Test loss for plotting")
 
     # ========================================
     # TRAINING HYPERPARAMETERS
