@@ -21,8 +21,6 @@ echo "Installing ML packages..."
 pip install transformers accelerate peft
 pip install pandas pyarrow numpy matplotlib seaborn scikit-learn tqdm datasets
 
-# Skip bitsandbytes for now (may have compatibility issues with nightly)
-echo "Skipping bitsandbytes (use --no-qlora for experiments)"
 
 # Set up environment variables
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
@@ -68,13 +66,10 @@ print("="*60)
 PYTHON_EOF
 
 echo ""
-echo "✓ Setup complete!"
-echo ""
-echo "IMPORTANT: Skip QLoRA experiments (Blackwell compatibility)"
+echo "Setup complete!"
 echo ""
 echo "Run experiments:"
 echo "  conda activate cs224n"
-echo "  # Skip QLoRA:"
 echo "  ./experiments.sh --only-fp32"
 echo "  ./experiments.sh --only-fp16"
 echo "  ./experiments.sh --only-lora"

@@ -23,7 +23,7 @@ class Trainer:
                  eval_interval=500, checkpoint_dir="checkpoints", use_amp=True,
                  use_lora=False, lora_r=8, lora_alpha=16,
                  lora_dropout=0.1, lora_target_modules=None,
-                 gradient_accumulation_steps=1):
+                 gradient_accumulation_steps=2):
 
         self.num_epochs = num_epochs
         self.batch_size = batch_size
@@ -63,7 +63,6 @@ class Trainer:
 
         self.optim = None
         self.scheduler = None
-        # ✅ new GradScaler API
         self.scaler = GradScaler("cuda", enabled=self.use_amp)
 
         self.best_val_acc = 0.0
@@ -122,7 +121,7 @@ class Trainer:
                 buffer = io.BytesIO()
                 torch.save(cpu_sd, buffer)
                 self._atomic_save_bytes(buffer.getvalue(), dest_path)
-            print(f"✓ Saved model weights to: {dest_path}")
+            print(f" Saved model weights to: {dest_path}")
         except Exception as e:
             print(f"✗ Failed to save model weights to {dest_path}: {e}")
             # last-resort: minimal emergency checkpoint (very small)
@@ -315,7 +314,7 @@ class Trainer:
                 'epoch_time': self.epoch_times
             })
             df.to_parquet(self.metrics_parquet_path)
-            print(f"✓ Saved metrics to {self.metrics_parquet_path}")
+            print(f" Saved metrics to {self.metrics_parquet_path}")
         except Exception as e:
             print(f"✗ Failed to save Parquet metrics: {e}")
 
@@ -488,7 +487,7 @@ class Trainer:
                 # Save best model
                 if val_acc > self.best_val_acc:
                     self.best_val_acc = val_acc
-                    print(f"✓ New best validation accuracy: {val_acc:.4f}")
+                    print(f" New best validation accuracy: {val_acc:.4f}")
                     meta = {"epoch": epoch + 1, "best_val_acc": val_acc}
                     self._save_model_only(self.best_model_path, extra_metadata=meta)
                     if self.use_lora:
@@ -496,7 +495,7 @@ class Trainer:
                         adapter_path = self.checkpoint_dir / f"best_lora_adapters"
                         try:
                             self.model.save_pretrained(adapter_path)
-                            print(f"✓ LoRA adapters saved to {adapter_path}")
+                            print(f" LoRA adapters saved to {adapter_path}")
                         except Exception as e:
                             print(f"⚠ Failed to save LoRA adapters: {e}")
                 

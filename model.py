@@ -16,7 +16,8 @@ class AttentionPooling(nn.Module):
         scores = self.W2(torch.tanh(self.W1(hidden_states))).squeeze(-1)  # [B, L]
         if attention_mask is not None:
             mask = attention_mask.to(torch.bool)
-            scores = scores.masked_fill(~mask, -1e9)
+            negative_inf = torch.finfo(scores.dtype).min
+            scores = scores.masked_fill(~mask, negative_inf)  # [B, L]
         weights = torch.softmax(scores, dim=-1)                            # [B, L]
         pooled = torch.sum(hidden_states * weights.unsqueeze(-1), dim=1)   # [B, H]
         return pooled
@@ -78,13 +79,32 @@ class CrossEncoderScorer(nn.Module):
             return self.pool(last_hidden_state, attention_mask)  # [B, H]
         elif self.pool_type == "mean":
             mask = attention_mask.unsqueeze(-1).to(last_hidden_state.dtype)  # [B, L, 1]
-            summed = (last_hidden_state * mask).sum(dim=1)                   # [B, H]
+            summed = (last_hidden_state * mask).sum(dim=1)         
+                      # [B, H]
             denom = mask.sum(dim=1).clamp(min=1e-6)                          # [B, 1]
             return summed / denom
         else:  # 'cls'
             return last_hidden_state[:, 0, :]
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids=None, attention_mask=None, **kwargs):
+        """
+        Forward pass - now PEFT compatible by accepting **kwargs.
+        
+        Args:
+            input_ids: Token IDs [B, L]
+            attention_mask: Attention mask [B, L]
+            **kwargs: Additional arguments (ignored, for PEFT compatibility)
+        
+        Returns:
+            logits: Scores [B]
+        """
+        # Handle case where PEFT might pass inputs_embeds
+        if input_ids is None and 'inputs_embeds' in kwargs:
+            raise NotImplementedError(
+                "This model doesn't support inputs_embeds. "
+                "Make sure input_ids are provided."
+            )
+        
         out = self.backbone(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
         pooled = self._pool(out.last_hidden_state, attention_mask)  # [B, H]
         pooled = self.dropout(pooled)
@@ -108,10 +128,10 @@ def get_model_factory(arch_key: str, *, model_name: str = "roberta-base", load_i
         raise ValueError(f"Unknown model key '{arch_key}'. Available: {list(options.keys())}")
     return options[arch_key]
 
-def  get_model(model_name:str):
-    models = {
-        "cross_encoder": CrossEncoderScorer(pool_type="cls"),
-        "cross_encoder_mean_pooling": CrossEncoderScorer(pool_type="mean"),
-        "cross_encoder_attention": CrossEncoderScorer(pool_type="attention"),
-        }
-    return models[model_name]
+def get_model(model_name: str):
+    pool_type = {
+        "cross_encoder": "cls",
+        "cross_encoder_mean_pooling": "mean",
+        "cross_encoder_attention": "attention"
+    }
+    return CrossEncoderScorer(pool_type=pool_type[model_name])
