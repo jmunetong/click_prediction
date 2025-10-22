@@ -72,14 +72,7 @@ def plot_training_results(
     print(f"Training data source: click_train.parquet (preprocessed)")
     print(f"Test data source: click_test.parquet (preprocessed)")
     print(f"Number of epochs to plot: {num_epochs_actual}")
-    if test_acc is not None:
-        print(f"Test accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
-        if test_acc >= 0.40:
-            print("✓ Test accuracy meets requirement (≥40%)")
-        else:
-            print("⚠ Warning: Test accuracy below expected 40%")
-    print("="*60)
-    
+
     # ========================================
     # Plot 1: PRIMARY PLOT - Training vs Test Accuracy
     # This is the key plot for the assignment requirement
@@ -91,32 +84,30 @@ def plot_training_results(
             label='Training Accuracy (click_train.parquet)', color='#2E86AB')
     
     # Add validation if available (ALL EPOCHS)
-    if has_validation:
-        ax.plot(epochs, epoch_val_accuracies, 's-', linewidth=2.5, markersize=9,
-                label='Validation Accuracy', color='#A23B72', alpha=0.8)
+    ax.plot(epochs, epoch_val_accuracies, 's-', linewidth=2.5, markersize=9,
+            label='Validation Accuracy', color='#A23B72', alpha=0.8)
     
     # Add test accuracy prominently
-    if test_acc is not None:
-        # Horizontal line
-        ax.axhline(y=test_acc, color='#F18F01', linestyle='--', linewidth=3,
-                   label=f'Test Accuracy (click_test.parquet): {test_acc:.4f}')
-        # Diamond marker at the end for emphasis
-        ax.plot(epochs[-1], test_acc, 'D', markersize=15, color='#F18F01', 
-                markeredgewidth=2, markeredgecolor='darkred')
-        
-        # Add text annotation for test accuracy
-        ax.text(epochs[-1] * 0.98, test_acc, f'  {test_acc:.4f} ({test_acc*100:.1f}%)',
-                fontsize=12, fontweight='bold', color='#F18F01',
-                verticalalignment='bottom', horizontalalignment='right',
-                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#F18F01', linewidth=2))
+    # Horizontal line
+    ax.axhline(y=test_acc, color='#F18F01', linestyle='--', linewidth=3,
+                label=f'Test Accuracy (click_test.parquet): {test_acc:.4f}')
+    # Diamond marker at the end for emphasis
+    ax.plot(epochs[-1], test_acc, 'D', markersize=15, color='#F18F01', 
+            markeredgewidth=2, markeredgecolor='darkred')
     
+    # Add text annotation for test accuracy
+    ax.text(epochs[-1] * 0.98, test_acc, f'  {test_acc:.4f} ({test_acc*100:.1f}%)',
+            fontsize=12, fontweight='bold', color='#F18F01',
+            verticalalignment='bottom', horizontalalignment='right',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#F18F01', linewidth=2))
+
     # Add 40% threshold line
     ax.axhline(y=0.40, color='gray', linestyle=':', linewidth=2, alpha=0.5,
                label='Expected threshold (40%)')
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-    ax.set_title(f'Training and Test Accuracy (All {num_epochs_actual} Epochs)\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Accuracy', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -139,21 +130,18 @@ def plot_training_results(
     # Plot epoch-level losses (ALL EPOCHS)
     ax.plot(epochs, epoch_train_losses, 'o-', linewidth=3, markersize=10,
             label='Training Loss (click_train.parquet)', color='#2E86AB')
-    
-    if has_validation:
-        ax.plot(epochs, epoch_val_losses, 's-', linewidth=2.5, markersize=9,
-                label='Validation Loss', color='#A23B72', alpha=0.8)
+    ax.plot(epochs, epoch_val_losses, 's-', linewidth=2.5, markersize=9,
+            label='Validation Loss', color='#A23B72', alpha=0.8)
     
     # Add test loss
-    if test_loss is not None:
-        ax.axhline(y=test_loss, color='#F18F01', linestyle='--', linewidth=3,
-                   label=f'Test Loss (click_test.parquet): {test_loss:.4f}')
-        ax.plot(epochs[-1], test_loss, 'D', markersize=15, color='#F18F01',
-                markeredgewidth=2, markeredgecolor='darkred')
+    ax.axhline(y=test_loss, color='#F18F01', linestyle='--', linewidth=3,
+                label=f'Test Loss (click_test.parquet): {test_loss:.4f}')
+    ax.plot(epochs[-1], test_loss, 'D', markersize=15, color='#F18F01',
+            markeredgewidth=2, markeredgecolor='darkred')
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Loss', fontsize=14, fontweight='bold')
-    ax.set_title(f'Training and Test Loss (All {num_epochs_actual} Epochs)\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Loss', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -172,13 +160,13 @@ def plot_training_results(
     # Loss subplot (ALL EPOCHS)
     ax1.plot(epochs, epoch_train_losses, 'o-', linewidth=2.5, markersize=9,
              label='Training Loss', color='#2E86AB')
-    if has_validation:
-        ax1.plot(epochs, epoch_val_losses, 's-', linewidth=2, markersize=8,
-                 label='Validation Loss', color='#A23B72', alpha=0.8)
-    if test_loss is not None:
-        ax1.axhline(y=test_loss, color='#F18F01', linestyle='--', linewidth=2.5,
-                    label=f'Test Loss ({test_loss:.4f})')
-        ax1.plot(epochs[-1], test_loss, 'D', markersize=12, color='#F18F01')
+
+    ax1.plot(epochs, epoch_val_losses, 's-', linewidth=2, markersize=8,
+                label='Validation Loss', color='#A23B72', alpha=0.8)
+
+    ax1.axhline(y=test_loss, color='#F18F01', linestyle='--', linewidth=2.5,
+                label=f'Test Loss ({test_loss:.4f})')
+    ax1.plot(epochs[-1], test_loss, 'D', markersize=12, color='#F18F01')
     
     ax1.set_xlabel('Epoch', fontsize=13, fontweight='bold')
     ax1.set_ylabel('Loss', fontsize=13, fontweight='bold')
@@ -211,7 +199,7 @@ def plot_training_results(
     ax2.set_xticks(epochs)
     ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
     
-    fig.suptitle(f'Training vs Test Performance - All {num_epochs_actual} Epochs\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
+    fig.suptitle(f'Training vs Test Performance', 
                  fontsize=16, fontweight='bold', y=1.02)
     
     plt.tight_layout()
@@ -222,65 +210,61 @@ def plot_training_results(
     # ========================================
     # Plot 4: Step-level Training Progress (optional, for detailed analysis)
     # ========================================
-    if step_train_losses is not None and len(step_train_losses) > 0:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-        
-        # Loss over steps
-        ax1.plot(step_numbers, step_train_losses, alpha=0.3, color='#2E86AB', linewidth=0.5)
-        
-        # Add smoothed line
-        window_size = min(50, len(step_train_losses) // 10)
-        if window_size > 1:
-            smoothed_loss = np.convolve(step_train_losses, 
-                                       np.ones(window_size)/window_size, 
-                                       mode='valid')
-            ax1.plot(step_numbers[window_size-1:], smoothed_loss, 
-                    color='#2E86AB', linewidth=2, label=f'Smoothed (window={window_size})')
-        
-        ax1.set_xlabel('Training Step', fontsize=13, fontweight='bold')
-        ax1.set_ylabel('Loss', fontsize=13, fontweight='bold')
-        ax1.set_title('Training Loss (Step-level Detail)', fontsize=14, fontweight='bold')
-        if window_size > 1:
-            ax1.legend(fontsize=10)
-        ax1.grid(True, alpha=0.3, linestyle='--')
-        
-        # Accuracy over steps
-        ax2.plot(step_numbers, step_train_accuracies, alpha=0.3, color='#2E86AB', linewidth=0.5)
-        
-        # Add smoothed line
-        if window_size > 1:
-            smoothed_acc = np.convolve(step_train_accuracies, 
-                                      np.ones(window_size)/window_size, 
-                                      mode='valid')
-            ax2.plot(step_numbers[window_size-1:], smoothed_acc, 
-                    color='#2E86AB', linewidth=2, label=f'Smoothed (window={window_size})')
-        
-        ax2.set_xlabel('Training Step', fontsize=13, fontweight='bold')
-        ax2.set_ylabel('Accuracy', fontsize=13, fontweight='bold')
-        ax2.set_title('Training Accuracy (Step-level Detail)', fontsize=14, fontweight='bold')
-        if window_size > 1:
-            ax2.legend(fontsize=10)
-        ax2.grid(True, alpha=0.3, linestyle='--')
-        ax2.set_ylim([0, 1.0])
-        
-        plt.tight_layout()
-        plt.savefig(save_dir / 'step_level_plot.png', dpi=300, bbox_inches='tight')
-        print(f"✓ Saved: {save_dir / 'step_level_plot.png'}")
-        plt.close()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Loss over steps
+    ax1.plot(step_numbers, step_train_losses, alpha=0.3, color='#2E86AB', linewidth=0.5)
+    
+    # Add smoothed line
+    window_size = min(50, len(step_train_losses) // 10)
+    if window_size > 1:
+        smoothed_loss = np.convolve(step_train_losses, 
+                                    np.ones(window_size)/window_size, 
+                                    mode='valid')
+        ax1.plot(step_numbers[window_size-1:], smoothed_loss, 
+                color='#2E86AB', linewidth=2, label=f'Smoothed (window={window_size})')
+    
+    ax1.set_xlabel('Training Step', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Loss', fontsize=13, fontweight='bold')
+    ax1.set_title('Training Loss (Step-level Detail)', fontsize=14, fontweight='bold')
+    if window_size > 1:
+        ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3, linestyle='--')
+    
+    # Accuracy over steps
+    ax2.plot(step_numbers, step_train_accuracies, alpha=0.3, color='#2E86AB', linewidth=0.5)
+    
+    # Add smoothed line
+    if window_size > 1:
+        smoothed_acc = np.convolve(step_train_accuracies, 
+                                    np.ones(window_size)/window_size, 
+                                    mode='valid')
+        ax2.plot(step_numbers[window_size-1:], smoothed_acc, 
+                color='#2E86AB', linewidth=2, label=f'Smoothed (window={window_size})')
+    
+    ax2.set_xlabel('Training Step', fontsize=13, fontweight='bold')
+    ax2.set_ylabel('Accuracy', fontsize=13, fontweight='bold')
+    ax2.set_title('Training Accuracy (Step-level Detail)', fontsize=14, fontweight='bold')
+    if window_size > 1:
+        ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3, linestyle='--')
+    ax2.set_ylim([0, 1.0])
+    
+    plt.tight_layout()
+    plt.savefig(save_dir / 'step_level_plot.png', dpi=300, bbox_inches='tight')
+    print(f"✓ Saved: {save_dir / 'step_level_plot.png'}")
+    plt.close()
     
     print("\n" + "="*60)
     print("All plots saved successfully!")
     print("="*60)
     
     # Print final summary
-    if test_acc is not None:
-        print(f"\n📊 FINAL TEST ACCURACY: {test_acc:.4f} ({test_acc*100:.2f}%)")
-        if test_acc >= 0.40:
-            print("✓ Test accuracy meets the expected threshold of 40%")
-        else:
-            print(f"⚠ Test accuracy is below expected 40% (gap: {(0.40-test_acc)*100:.2f}%)")
-    
-    print(f"\n✓ Plotted all {num_epochs_actual} epochs for {model_name}")
+
+    print(f"\n FINAL TEST ACCURACY: {test_acc:.4f} ({test_acc*100:.2f}%)")
+
+    print(f"\n Plotted all {num_epochs_actual} epochs for {model_name}")
 
 
 def load_metrics_and_plot(metrics_path, test_acc=None, test_loss=None, save_dir="plots", model_name="roberta-base"):
@@ -336,10 +320,6 @@ def load_metrics_and_plot(metrics_path, test_acc=None, test_loss=None, save_dir=
     print(f"Train accuracies available: {len(epoch_train_accuracies)}")
     print(f"Val accuracies available: {len(epoch_val_accuracies)}")
     
-    if test_acc is None or test_loss is None:
-        print("\n⚠ WARNING: Test accuracy and/or test loss not provided!")
-        print("   For assignment requirements, you must provide test results from click_test.parquet")
-    
     # Create plots with ALL epochs
     plot_training_results(
         epoch_train_accuracies=epoch_train_accuracies,
@@ -382,7 +362,7 @@ def load_metrics_and_plot(metrics_path, test_acc=None, test_loss=None, save_dir=
     metrics_file = actual_save_dir / 'plot_metrics.json'
     with open(metrics_file, 'w') as f:
         json.dump(combined_metrics, f, indent=2)
-    print(f"\n✓ Combined metrics saved to: {metrics_file}")
+    print(f"\n Combined metrics saved to: {metrics_file}")
 
 
 def main():

@@ -218,6 +218,12 @@ class Trainer:
         scheduler = LambdaLR(optim, lr_lambda)
         return optim, scheduler
 
+    def test(self, test_loader):
+        test_loss, test_acc = self.validate(test_loader)
+        print(f"\nTest Results - Loss: {test_loss:.4f}, Accuracy:{test_acc:.4f}")
+        return test_loss, test_acc
+
+
     def validate(self, val_loader):
         """Validate with proper memory management."""
         if val_loader is None:
@@ -275,93 +281,6 @@ class Trainer:
         self.model.train()
         return avg_acc, avg_loss
 
-    def test(self, test_loader):
-        """
-        Evaluate model on test data.
-        
-        Args:
-            test_loader: DataLoader for test data
-            
-        Returns:
-            tuple: (test_accuracy, test_loss)
-        """
-        if test_loader is None:
-            print("Warning: No test loader provided")
-            return 0.0, 0.0
-        
-        print("\n" + "="*50)
-        print("Running Test Evaluation...")
-        print("="*50)
-        
-        self.model.eval()
-        total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
-        num_batches = 0
-        
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(test_loader):
-                input_ids = batch["input_ids"].to(self.device, non_blocking=True)
-                attention = batch["attention_mask"].to(self.device, non_blocking=True)
-                cand_mask = batch["candidate_mask"].to(self.device, non_blocking=True)
-                labels = batch["label_index"].to(self.device, non_blocking=True)
-                
-                B, N, L = input_ids.shape
-                input_ids_flat = input_ids.reshape(B * N, L)
-                attention_flat = attention.reshape(B * N, L)
-                
-                with autocast(device_type='cuda', enabled=self.use_amp):
-                    logits_flat = self.model(input_ids_flat, attention_flat)
-                    logits = logits_flat.view(B, N)
-                    logits = logits.masked_fill(~cand_mask, float("-inf"))
-                    loss = F.cross_entropy(logits, labels)
-                
-                pred = logits.argmax(dim=1)
-                correct = (pred == labels).sum().item()
-                
-                total_loss += loss.item()
-                total_correct += correct
-                total_samples += B
-                num_batches += 1
-                
-                # Progress logging every 100 batches
-                if (batch_idx + 1) % 100 == 0:
-                    current_acc = total_correct / total_samples
-                    current_loss = total_loss / num_batches
-                    print(f"  Processed {num_batches} batches | "
-                          f"Samples: {total_samples} | "
-                          f"Running Loss: {current_loss:.4f} | "
-                          f"Running Acc: {current_acc:.4f}")
-                
-                # Clean up batch tensors
-                del input_ids, attention, cand_mask, labels
-                del input_ids_flat, attention_flat, logits_flat, logits, loss, pred
-                
-                # Periodic garbage collection
-                if batch_idx % 50 == 0:
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    gc.collect()
-        
-        # Clear cache after test
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        
-        test_loss = total_loss / num_batches if num_batches > 0 else 0.0
-        test_acc = total_correct / total_samples if total_samples > 0 else 0.0
-        
-        print("\n" + "="*50)
-        print("Test Results:")
-        print("="*50)
-        print(f"  Total Batches: {num_batches}")
-        print(f"  Total Samples: {total_samples}")
-        print(f"  Test Loss: {test_loss:.4f}")
-        print(f"  Test Accuracy: {test_acc:.4f}")
-        print("="*50 + "\n")
-        
-        return test_acc, test_loss
-
     def get_metrics(self):
         """Return training metrics."""
         return {
@@ -382,9 +301,9 @@ class Trainer:
         try:
             with open(self.metrics_path, 'w') as f:
                 json.dump(metrics, f, indent=2)
-            print(f"✓ Saved metrics to {self.metrics_path}")
+            print(f"Saved metrics to {self.metrics_path}")
         except Exception as e:
-            print(f"✗ Failed to save JSON metrics: {e}")
+            print(f"Failed to save JSON metrics: {e}")
         
         try:
             df = pd.DataFrame({
@@ -410,8 +329,6 @@ class Trainer:
         print(f"Total optimizer steps: {total_steps}")
         print(f"Mixed Precision: {'Enabled' if self.use_amp else 'Disabled'}")
         print(f"Gradient Accumulation Steps: {self.gradient_accumulation_steps}")
-        print(f"Effective Batch Size: {self.batch_size * self.gradient_accumulation_steps}")
-
         print("Training Mode:", "LoRA" if self.use_lora else "Full Fine-tuning")
 
         self.optim, self.scheduler = self._init_optimizer(self.model, total_steps)
@@ -440,7 +357,6 @@ class Trainer:
             
             # Reset gradients at epoch start
             self.optim.zero_grad(set_to_none=True)
-
             for batch_idx, batch in enumerate(train_loader):
                 if epoch_total >= total_samples:
                     print(f"\nCompleted epoch {epoch + 1} (processed {epoch_total} samples)")
