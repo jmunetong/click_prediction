@@ -8,7 +8,6 @@ Emphasis on training (from preprocessed_click_train.parquet) vs test (from prepr
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import argparse
 from pathlib import Path
 import json
@@ -22,12 +21,12 @@ def plot_training_results(
     test_acc=None,
     test_loss=None,
     save_dir="plots",
-    suffix="",
     step_train_losses=None,
     step_train_accuracies=None,
     step_numbers=None,
     best_val_acc=None,
     training_mode="Full Fine-tuning",
+    model_name="roberta-base",
     num_epochs=None,
     batch_size=None,
     learning_rate=None
@@ -46,12 +45,12 @@ def plot_training_results(
         test_acc: Test accuracy from click_test.parquet (REQUIRED for assignment)
         test_loss: Test loss from click_test.parquet (REQUIRED for assignment)
         save_dir: Directory to save plots
-        suffix: Suffix for filenames (e.g., "_lora")
         step_train_losses: List of training losses per step (optional)
         step_train_accuracies: List of training accuracies per step (optional)
         step_numbers: List of step numbers (optional)
         best_val_acc: Best validation accuracy achieved (optional)
         training_mode: String describing training mode (optional)
+        model_name: Name of the model used (e.g., "roberta-base")
         num_epochs: Number of epochs (optional)
         batch_size: Batch size used (optional)
         learning_rate: Learning rate used (optional)
@@ -67,6 +66,8 @@ def plot_training_results(
     print("\n" + "="*60)
     print("Generating plots...")
     print("="*60)
+    print(f"Model: {model_name}")
+    print(f"Training mode: {training_mode}")
     print(f"Save directory: {save_dir}")
     print(f"Training data source: click_train.parquet (preprocessed)")
     print(f"Test data source: click_test.parquet (preprocessed)")
@@ -115,7 +116,7 @@ def plot_training_results(
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-    ax.set_title(f'Training and Test Accuracy (All {num_epochs_actual} Epochs)\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Accuracy (All {num_epochs_actual} Epochs)\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -126,7 +127,7 @@ def plot_training_results(
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
     
     plt.tight_layout()
-    plt.savefig(save_dir / f'training_test_accuracy.png', dpi=300, bbox_inches='tight')
+    plt.savefig(save_dir / 'training_test_accuracy.png', dpi=300, bbox_inches='tight')
     print(f"✓ SAVED PRIMARY PLOT: {save_dir / 'training_test_accuracy.png'}")
     plt.close()
     
@@ -152,7 +153,7 @@ def plot_training_results(
     
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_ylabel('Loss', fontsize=14, fontweight='bold')
-    ax.set_title(f'Training and Test Loss (All {num_epochs_actual} Epochs)\n(click_train.parquet vs click_test.parquet)', 
+    ax.set_title(f'Training and Test Loss (All {num_epochs_actual} Epochs)\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', pad=15)
     ax.legend(fontsize=11, loc='best', framealpha=0.95)
     ax.grid(True, alpha=0.3, linestyle='--')
@@ -210,7 +211,7 @@ def plot_training_results(
     ax2.set_xticks(epochs)
     ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
     
-    fig.suptitle(f'Training vs Test Performance - All {num_epochs_actual} Epochs\n(click_train.parquet vs click_test.parquet)', 
+    fig.suptitle(f'Training vs Test Performance - All {num_epochs_actual} Epochs\n{model_name} - {training_mode}\n(click_train.parquet vs click_test.parquet)', 
                  fontsize=16, fontweight='bold', y=1.02)
     
     plt.tight_layout()
@@ -279,56 +280,59 @@ def plot_training_results(
         else:
             print(f"⚠ Test accuracy is below expected 40% (gap: {(0.40-test_acc)*100:.2f}%)")
     
-    print(f"\n✓ Plotted all {num_epochs_actual} epochs")
+    print(f"\n✓ Plotted all {num_epochs_actual} epochs for {model_name}")
 
 
-def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, save_dir="plots"):
+def load_metrics_and_plot(metrics_path, test_acc=None, test_loss=None, save_dir="plots", model_name="roberta-base"):
     """
-    Load checkpoint and create plots
+    Load training metrics from JSON file and create plots
     
     Args:
-        checkpoint_path: Path to checkpoint file
+        metrics_path: Path to training_metrics.json file
         test_acc: Test accuracy from click_test.parquet (REQUIRED)
         test_loss: Test loss from click_test.parquet (REQUIRED)
-        save_dir: Base directory to save plots (will be appended with suffix)
+        save_dir: Base directory to save plots (will be appended with model name and training mode)
+        model_name: Name of the model (e.g., "roberta-base")
     """
-    print(f"\nLoading checkpoint from: {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    print(f"\nLoading training metrics from: {metrics_path}")
     
-    # Extract metrics from checkpoint (ALWAYS USE ALL AVAILABLE EPOCHS)
-    epoch_train_accuracies = checkpoint.get('epoch_train_accuracies', [])
-    epoch_train_losses = checkpoint.get('epoch_train_losses', [])
-    epoch_val_accuracies = checkpoint.get('epoch_val_accuracies', [])
-    epoch_val_losses = checkpoint.get('epoch_val_losses', [])
-    step_train_losses = checkpoint.get('step_train_losses', None)
-    step_train_accuracies = checkpoint.get('step_train_accuracies', None)
-    step_numbers = checkpoint.get('step_numbers', None)
-    best_val_acc = checkpoint.get('val_accuracy', checkpoint.get('train_accuracy', None))
+    # Load metrics from JSON file
+    with open(metrics_path, 'r') as f:
+        metrics = json.load(f)
     
-    # Determine training mode and suffix
-    use_lora = checkpoint.get('use_lora', False)
+    # Extract metrics
+    epoch_train_accuracies = metrics.get('epoch_train_accuracies', [])
+    epoch_train_losses = metrics.get('epoch_train_losses', [])
+    epoch_val_accuracies = metrics.get('epoch_val_accuracies', [])
+    epoch_val_losses = metrics.get('epoch_val_losses', [])
+    step_train_losses = metrics.get('step_train_losses', None)
+    step_train_accuracies = metrics.get('step_train_accuracies', None)
+    step_numbers = metrics.get('step_numbers', None)
+    best_val_acc = metrics.get('best_val_acc', None)
+    
+    # Get training configuration
+    training_mode = metrics.get('training_mode', 'Unknown')
+    use_lora = metrics.get('use_lora', False)
+    num_epochs = metrics.get('num_epochs', len(epoch_train_accuracies))
+    batch_size = metrics.get('batch_size', None)
+    learning_rate = metrics.get('learning_rate', None)
+    
+    # Create save directory with model name and training mode
+    base_save_dir = Path(save_dir)
+    
+    # Sanitize model name for directory
+    model_dir_name = model_name.replace("/", "_").replace("\\", "_")
     
     if use_lora:
-        suffix = "_lora"
-        training_mode = "LoRA"
+        # LoRA training
+        actual_save_dir = base_save_dir / model_dir_name / "lora"
     else:
-        suffix = ""
-        training_mode = "Full Fine-tuning"
+        # Full fine-tuning
+        actual_save_dir = base_save_dir / model_dir_name / "full_finetuning"
     
-    # Create save directory with suffix
-    base_save_dir = Path(save_dir)
-    if suffix:
-        # If suffix exists (e.g., "_lora"), create subdirectory
-        actual_save_dir = base_save_dir / training_mode.lower().replace(" ", "_")
-    else:
-        # For full fine-tuning, use "full_finetuning" subdirectory
-        actual_save_dir = base_save_dir / "full_finetuning"
-    
-    # Get other metadata
-    num_epochs = len(epoch_train_accuracies)  # Use actual number from data
-    
+    print(f"Model: {model_name}")
     print(f"Training mode: {training_mode}")
-    print(f"Total epochs in checkpoint: {num_epochs}")
+    print(f"Total epochs: {num_epochs}")
     print(f"Train accuracies available: {len(epoch_train_accuracies)}")
     print(f"Val accuracies available: {len(epoch_val_accuracies)}")
     
@@ -345,20 +349,26 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         test_acc=test_acc,
         test_loss=test_loss,
         save_dir=actual_save_dir,
-        suffix="",  # No suffix in filenames since directory already has it
         step_train_losses=step_train_losses,
         step_train_accuracies=step_train_accuracies,
         step_numbers=step_numbers,
         best_val_acc=best_val_acc,
         training_mode=training_mode,
+        model_name=model_name,
         num_epochs=num_epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
     )
     
-    # Save metrics to JSON in the same directory
-    metrics = {
+    # Save combined metrics (training + test) to JSON in the same directory
+    combined_metrics = {
+        'model_name': model_name,
         'training_dataset': 'click_train.parquet (preprocessed)',
         'test_dataset': 'click_test.parquet (preprocessed)',
+        'training_mode': training_mode,
         'num_epochs': num_epochs,
+        'batch_size': batch_size,
+        'learning_rate': learning_rate,
         'epoch_train_accuracies': epoch_train_accuracies,
         'epoch_train_losses': epoch_train_losses,
         'epoch_val_accuracies': epoch_val_accuracies,
@@ -367,43 +377,43 @@ def load_checkpoint_and_plot(checkpoint_path, test_acc=None, test_loss=None, sav
         'test_accuracy': test_acc,
         'test_loss': test_loss,
         'meets_40_percent_requirement': test_acc >= 0.40 if test_acc is not None else None,
-        'training_mode': training_mode,
     }
     
-    metrics_file = actual_save_dir / 'metrics.json'
+    metrics_file = actual_save_dir / 'plot_metrics.json'
     with open(metrics_file, 'w') as f:
-        json.dump(metrics, f, indent=2)
-    print(f"\n✓ Metrics saved to: {metrics_file}")
+        json.dump(combined_metrics, f, indent=2)
+    print(f"\n✓ Combined metrics saved to: {metrics_file}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Plot training results from checkpoint\n'
+        description='Plot training results from training_metrics.json\n'
                     'Training data: click_train.parquet\n'
                     'Test data: click_test.parquet\n'
                     'Expected test accuracy: ≥40%',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('--checkpoint_path', type=str, required=True,
-                       help='Path to checkpoint file (e.g., checkpoints/last_model.pt)')
+    parser.add_argument('--metrics_path', type=str, required=True,
+                       help='Path to training_metrics.json file (e.g., checkpoints/roberta-base/training_metrics.json)')
     parser.add_argument('--test_acc', type=float, required=True,
                        help='Test accuracy from click_test.parquet (REQUIRED)')
     parser.add_argument('--test_loss', type=float, required=True,
                        help='Test loss from click_test.parquet (REQUIRED)')
     parser.add_argument('--save_dir', type=str, default='results',
                        help='Base directory to save plots (default: results)')
+    parser.add_argument('--model_name', type=str, default='roberta-base',
+                       help='Model name (e.g., roberta-base, bert-base-uncased)')
     
     args = parser.parse_args()
     
-    load_checkpoint_and_plot(
-        checkpoint_path=args.checkpoint_path,
+    load_metrics_and_plot(
+        metrics_path=args.metrics_path,
         test_acc=args.test_acc,
         test_loss=args.test_loss,
-        save_dir=args.save_dir
+        save_dir=args.save_dir,
+        model_name=args.model_name
     )
 
 
 if __name__ == "__main__":
     main()
-
-

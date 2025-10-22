@@ -9,7 +9,7 @@ set -e  # Exit on error
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-NUM_EPOCHS=8
+NUM_EPOCHS=1
 BATCH_SIZE=16
 LEARNING_RATE=2e-5
 WEIGHT_DECAY=0.01
@@ -63,6 +63,7 @@ run_full_finetuning_fp32() {
 
     print_info "Training with standard FP32 precision..."
     python main.py \
+        --model_name $MODEL_NAME\
         --num_epochs $NUM_EPOCHS \
         --batch_size $BATCH_SIZE \
         --learning_rate $LEARNING_RATE \

@@ -1,8 +1,8 @@
 from dataset import ParquetDataset, collate_queries
 from train import Trainer
-from plots import load_checkpoint_and_plot
+from plot_results import load_metrics_and_plot
 from torch.utils.data import DataLoader
-from model import get_model
+from pathlib import Path
 
 
 def main(args):
@@ -14,6 +14,7 @@ def main(args):
     print("="*60)
     print("CLICK PREDICTION TRAINING PIPELINE")
     print("="*60)
+    print(f"Model: {args.model_name}")
     print(f"Training dataset: {train_data_path}")
     print(f"Validation dataset: {val_data_path}")
     print(f"Test dataset: {test_data_path}")
@@ -55,8 +56,14 @@ def main(args):
     if args.lora_target_modules:
         lora_target_modules = [m.strip() for m in args.lora_target_modules.split(',')]
     
+    # Create model-specific checkpoint directory
+    # Sanitize model name for directory path
+    model_dir_name = args.model_name.replace("/", "_").replace("\\", "_")
+    checkpoint_dir = Path(args.checkpoint_dir) / model_dir_name
+    
     # Initialize trainer
-    trainer = Trainer(model_name=args.model_name
+    trainer = Trainer(
+        model_name=args.model_name,
         num_epochs=args.num_epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
@@ -65,7 +72,7 @@ def main(args):
         max_grad_norm=args.max_grad_norm,
         log_interval=args.log_interval,
         eval_interval=args.eval_interval,
-        checkpoint_dir=args.checkpoint_dir,
+        checkpoint_dir=str(checkpoint_dir),
         use_amp=args.use_amp,
         use_lora=args.use_lora,
         lora_r=args.lora_r,
@@ -94,22 +101,29 @@ def main(args):
     print("\n" + "="*60)
     print("STEP 3: GENERATING PLOTS")
     print("="*60)
-    load_checkpoint_and_plot(
-        checkpoint_path=str(trainer.best_model_path),
+    load_metrics_and_plot(
+        metrics_path=str(trainer.metrics_path),  # Path to training_metrics.json
         test_acc=test_acc,
         test_loss=test_loss,
-        save_dir="results"
+        save_dir="results",
+        model_name=args.model_name
     )
     
     # Final summary
     print("\n" + "="*60)
-    print("PIPELINE COMPLETE!")
+    print("✓ PIPELINE COMPLETE!")
     print("="*60)
+    print(f"Model: {args.model_name}")
     print(f"Best model: {trainer.best_model_path}")
+    print(f"Last checkpoint: {trainer.last_checkpoint_path}")
+    print(f"Training metrics: {trainer.metrics_path}")
     print(f"Test accuracy: {test_acc:.4f} ({test_acc*100:.2f}%)")
     print(f"Test loss: {test_loss:.4f}")
-    print(f"Plots saved to: results/")
-    print(f"Parquet data: results/training_results*.parquet")
+    
+    # Determine training mode subdirectory
+    training_mode_dir = "lora" if args.use_lora else "full_finetuning"
+    plots_dir = Path("results") / model_dir_name / training_mode_dir
+    print(f"Plots saved to: {plots_dir}/")
     print("="*60)
 
 
@@ -121,10 +135,11 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    # Model selection
-    parser.add_argument("--model_name", type=str, default="cross_encoder",
-                       choices=list(get_model("").keys()),
-                       help="Model name to use for training")
+    # ========================================
+    # MODEL SELECTION
+    # ========================================
+    parser.add_argument("--model_name", type=str, default="roberta-base",
+                       help="Model name to use (e.g., 'roberta-base', 'bert-base-uncased')")
 
     # ========================================
     # TRAINING HYPERPARAMETERS
@@ -150,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval_interval", type=int, default=500, 
                        help="Steps between validation evaluations")
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", 
-                       help="Directory to save model checkpoints")
+                       help="Base directory to save model checkpoints")
 
     # ========================================
     # OPTIMIZATION FLAGS
@@ -159,8 +174,6 @@ if __name__ == "__main__":
                        help="Enable automatic mixed precision (FP16) training")
     parser.add_argument("--use_lora", action="store_true", 
                        help="Enable LoRA (Low-Rank Adaptation)")
-    parser.add_argument("--use_qlora", action="store_true", 
-                       help="Enable QLoRA (Quantized LoRA with 4-bit quantization)")
 
     # ========================================
     # LORA-SPECIFIC ARGUMENTS
