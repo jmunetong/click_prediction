@@ -121,7 +121,7 @@ class Trainer:
                 self._atomic_save_bytes(buffer.getvalue(), dest_path)
             print(f" Saved model weights to: {dest_path}")
         except Exception as e:
-            print(f"✗ Failed to save model weights to {dest_path}: {e}")
+            print(f"Failed to save model weights to {dest_path}: {e}")
             # last-resort: minimal emergency checkpoint (very small)
             self._save_best_checkpoint_minimal(dest_path)
         finally:
@@ -139,7 +139,7 @@ class Trainer:
             buf = io.BytesIO()
             torch.save(tiny, buf)
             self._atomic_save_bytes(buf.getvalue(), dest_path.with_suffix(".minimal.pt"))
-            print(f"⚠ Wrote minimal fallback checkpoint: {dest_path.with_suffix('.minimal.pt')}")
+            print(f"Wrote minimal fallback checkpoint: {dest_path.with_suffix('.minimal.pt')}")
         except Exception as e:
             print(f"✗ Also failed to write minimal checkpoint: {e}")
 
