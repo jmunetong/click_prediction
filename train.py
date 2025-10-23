@@ -77,7 +77,7 @@ class Trainer:
 
         self.epoch_times = []
 
-        # prefer safetensors if available
+       
         try:
             import safetensors.torch as _st
             self._safetensors = _st
@@ -490,14 +490,6 @@ class Trainer:
                     print(f" New best validation accuracy: {val_acc:.4f}")
                     meta = {"epoch": epoch + 1, "best_val_acc": val_acc}
                     self._save_model_only(self.best_model_path, extra_metadata=meta)
-                    if self.use_lora:
-                        # save adapters separately if desired
-                        adapter_path = self.checkpoint_dir / f"best_lora_adapters"
-                        try:
-                            self.model.save_pretrained(adapter_path)
-                            print(f" LoRA adapters saved to {adapter_path}")
-                        except Exception as e:
-                            print(f"⚠ Failed to save LoRA adapters: {e}")
                 
                 # Clear cache after epoch
                 if torch.cuda.is_available():
