@@ -35,6 +35,7 @@ class CrossEncoderScorer(nn.Module):
         """
         super().__init__()
 
+        # IGNORE THIS: I was trying to add QLORA support, but it was not working properly.
         if load_in_4bit:
             from transformers import BitsAndBytesConfig
             compute_dtype = (

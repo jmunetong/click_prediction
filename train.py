@@ -65,6 +65,7 @@ class Trainer:
         self.scheduler = None
         self.scaler = GradScaler("cuda", enabled=self.use_amp)
 
+        # Tracking Variables
         self.best_val_acc = 0.0
         self.epoch_train_accuracies = []
         self.epoch_train_losses = []
@@ -86,9 +87,6 @@ class Trainer:
             self._safetensors = None
             self._use_safetensors = False
 
-    # ------------------------------------------------------------
-    # Saving helpers (small & robust)
-    # ------------------------------------------------------------
     def _cpu_state_dict(self):
         """Get model state dict on CPU to reduce GPU memory pressure & file size."""
         cpu_state = {k: v.detach().to("cpu") for k, v in self.model.state_dict().items()}
@@ -145,7 +143,6 @@ class Trainer:
         except Exception as e:
             print(f"✗ Also failed to write minimal checkpoint: {e}")
 
-    # ------------------------------------------------------------
 
     def _get_device(self):
         if torch.backends.mps.is_available():
@@ -157,6 +154,7 @@ class Trainer:
         return device
 
     def _setup_lora(self, model):
+        # Ignore LORA setup if not using it
         print("\n" + "="*50)
         print("Configuring LoRA...")
         print("="*50)

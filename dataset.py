@@ -53,7 +53,7 @@ def collate_queries(batch, pad_id: int = 1):
     Ns = [len(ex["input_ids"]) for ex in batch]
     max_N = max(Ns) if Ns else 0
 
-    # dynamic L (token length) across *all* pairs in this batch
+    # dynamic L (token length) across all pairs in this batch
     max_L = 0
     for ex in batch:
         for seq in ex["input_ids"]:

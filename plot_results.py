@@ -152,9 +152,8 @@ def plot_training_results(
     print(f"✓ Saved: {save_dir / 'training_test_loss.png'}")
     plt.close()
     
-    # ========================================
+
     # Plot 3: Combined Plot (Loss and Accuracy side by side)
-    # ========================================
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
     
     # Loss subplot (ALL EPOCHS)
@@ -207,10 +206,8 @@ def plot_training_results(
     print(f"✓ Saved: {save_dir / 'combined_plot.png'}")
     plt.close()
     
-    # ========================================
     # Plot 4: Step-level Training Progress (optional, for detailed analysis)
-    # ========================================
-
+  
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
     
     # Loss over steps

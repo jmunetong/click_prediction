@@ -164,7 +164,7 @@ The `run_experiment.sh` script automates multiple training configurations:
 ```bash
 bash run_experiment.sh
 ```
-Runs: FP32 full fine-tuning, FP16 full fine-tuning, and LoRA fine-tuning
+Runs: FP32 full fine-tuning, FP16 full fine-tuning, and LoRA fine-tuning (Ignore LoRA for now. I was having issues with gradient tractability. For the purpose of time, I skipped this option)
 
 ### Run Specific Experiment
 ```bash
@@ -285,56 +285,7 @@ click_prediction/
             └── plot_metrics.json
 ```
 
-## Tips and Best Practices
 
-1. **GPU Memory:** If you encounter out-of-memory errors:
-   - Reduce `--batch_size` (try 8 or 4)
-   - Enable `--use_amp` for mixed precision
-   - Use gradient accumulation (modify `gradient_accumulation_steps` in code)
 
-2. **Training Time:** Expected training times per epoch:
-   - FP32: ~30-45 minutes (GPU)
-   - FP16: ~20-30 minutes (GPU)
-   - CPU: Several hours (not recommended)
 
-3. **Model Selection:**
-   - Start with `cross_encoder_attention` (best performance)
-   - Use `cross_encoder_mean_pooling` for faster training
-   - `cross_encoder` (CLS token) is simplest but may underperform
 
-4. **Hyperparameter Tuning:**
-   - Learning rate: Try 1e-5 to 5e-5
-   - Batch size: 8-32 depending on GPU memory
-   - Epochs: 3-7 typically sufficient
-
-5. **Validation:** The pipeline automatically:
-   - Validates after each epoch
-   - Saves best model based on validation accuracy
-   - Reports final test accuracy
-
-## Troubleshooting
-
-**Issue:** `CUDA out of memory`
-**Solution:** Reduce batch size or enable mixed precision with `--use_amp`
-
-**Issue:** `FileNotFoundError` for data files
-**Solution:** Run `preprocess_data.py` first to generate preprocessed files
-
-**Issue:** Training is very slow
-**Solution:** Ensure you're using a GPU and enable `--use_amp`
-
-**Issue:** Low test accuracy
-**Solution:** Try training for more epochs, using attention pooling, or tuning learning rate
-
-## Performance Expectations
-
-Target accuracy: **≥40%** on test set
-
-Typical results with `cross_encoder_attention`:
-- Training accuracy: 50-60%
-- Validation accuracy: 45-55%
-- Test accuracy: 42-52%
-
-## License
-
-See project license for details.

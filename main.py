@@ -51,7 +51,7 @@ def main(args):
         persistent_workers=True,
     )
 
-    # Parse LoRA target modules if provided
+    # (IGNORE THIS FOR NOW I decided to not use LoRA target modules)
     lora_target_modules = None
     if args.lora_target_modules:
         lora_target_modules = [m.strip() for m in args.lora_target_modules.split(',')]
@@ -135,15 +135,12 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    # ========================================
     # MODEL SELECTION
-    # ========================================
     parser.add_argument("--model_name", type=str, default="roberta-base",
                        help="Model name to use (e.g., 'roberta-base', 'bert-base-uncased')")
 
-    # ========================================
+ 
     # TRAINING HYPERPARAMETERS
-    # ========================================
     parser.add_argument("--num_epochs", type=int, default=3, 
                        help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16, 
@@ -157,9 +154,8 @@ if __name__ == "__main__":
     parser.add_argument("--max_grad_norm", type=float, default=1.0, 
                        help="Max gradient norm for gradient clipping")
     
-    # ========================================
+
     # LOGGING AND CHECKPOINTING
-    # ========================================
     parser.add_argument("--log_interval", type=int, default=50, 
                        help="Steps between log prints")
     parser.add_argument("--eval_interval", type=int, default=500, 
@@ -167,17 +163,15 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", 
                        help="Base directory to save model checkpoints")
 
-    # ========================================
     # OPTIMIZATION FLAGS
-    # ========================================
     parser.add_argument("--use_amp", action="store_true", 
                        help="Enable automatic mixed precision (FP16) training")
     parser.add_argument("--use_lora", action="store_true", 
                        help="Enable LoRA (Low-Rank Adaptation)")
 
-    # ========================================
-    # LORA-SPECIFIC ARGUMENTS
-    # ========================================
+  
+    # LORA-SPECIFIC ARGUMENTS (IGNORE THIS FOR NOW)
+   
     parser.add_argument("--lora_r", type=int, default=8, 
                        help="LoRA rank (dimensionality of low-rank matrices)")
     parser.add_argument("--lora_alpha", type=int, default=16, 
