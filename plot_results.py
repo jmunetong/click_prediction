@@ -73,10 +73,9 @@ def plot_training_results(
     print(f"Test data source: click_test.parquet (preprocessed)")
     print(f"Number of epochs to plot: {num_epochs_actual}")
 
-    # ========================================
+   
     # Plot 1: PRIMARY PLOT - Training vs Test Accuracy
     # This is the key plot for the assignment requirement
-    # ========================================
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Plot training accuracy per epoch (ALL EPOCHS)
@@ -122,9 +121,9 @@ def plot_training_results(
     print(f"✓ SAVED PRIMARY PLOT: {save_dir / 'training_test_accuracy.png'}")
     plt.close()
     
-    # ========================================
+   
     # Plot 2: Training and Test Loss
-    # ========================================
+
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Plot epoch-level losses (ALL EPOCHS)
