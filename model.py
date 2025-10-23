@@ -112,23 +112,6 @@ class CrossEncoderScorer(nn.Module):
         logits = self.head(pooled).squeeze(-1)  # [B]
         return logits
 
-
-def get_model_factory(arch_key: str, *, model_name: str = "roberta-base", load_in_4bit: bool = False):
-    """
-    Returns a factory (callable) that instantiates CrossEncoderScorer with the desired pooling.
-    Usage:
-        Factory = get_model_factory("cross_encoder_attention", model_name="roberta-base")
-        model = Factory()   # creates the model when you need it
-    """
-    options = {
-        "cross_encoder": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="cls"),
-        "cross_encoder_mean_pooling": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="mean"),
-        "cross_encoder_attention": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="attention"),
-    }
-    if arch_key not in options:
-        raise ValueError(f"Unknown model key '{arch_key}'. Available: {list(options.keys())}")
-    return options[arch_key]
-
 def get_model(model_name: str):
     pool_type = {
         "cross_encoder": "cls",
@@ -136,3 +119,20 @@ def get_model(model_name: str):
         "cross_encoder_attention": "attention"
     }
     return CrossEncoderScorer(pool_type=pool_type[model_name])
+
+# def get_model_factory(arch_key: str, *, model_name: str = "roberta-base", load_in_4bit: bool = False):
+#     """
+#     Returns a factory (callable) that instantiates CrossEncoderScorer with the desired pooling.
+#     Usage:
+#         Factory = get_model_factory("cross_encoder_attention", model_name="roberta-base")
+#         model = Factory()   # creates the model when you need it
+#     """
+#     options = {
+#         "cross_encoder": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="cls"),
+#         "cross_encoder_mean_pooling": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="mean"),
+#         "cross_encoder_attention": partial(CrossEncoderScorer, model_name=model_name, load_in_4bit=load_in_4bit, pool_type="attention"),
+#     }
+#     if arch_key not in options:
+#         raise ValueError(f"Unknown model key '{arch_key}'. Available: {list(options.keys())}")
+#     return options[arch_key]
+
