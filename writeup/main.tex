@@ -69,6 +69,8 @@ The models were fine-tuned using cross-entropy loss over the candidate set for e
 This formulation treats click prediction as a single-label classification problem, where exactly one product per query is relevant.
 
 Cross-entropy loss measures the divergence between the predicted probability distribution over candidates and the ground-truth distribution (which assigns probability 1 to the clicked item and 0 to all others). Note that lower cross-entropy values indicate that the model assigns higher probability mass to the correct product.
+\subsubsection*{Hardware}
+The experiments were performed on an NVIDIA RTX PRO 6000 GPU (95.6~GB VRAM, 119~TFLOPS, CUDA~13.0) paired with an AMD EPYC~9B14~96-core CPU and~96.7~GB of RAM. The environment was built on the \texttt{vastai/base-image\_cuda-13.0.1-auto/jupyter} container, running PyTorch with mixed-precision training enabled.
 
 \subsubsection*{Optimization Strategies}
 All models were fine-tuned with FP16 mixed precision using automatic mixed precision (AMP). We applied differential learning rates: the RoBERTa backbone is trained at the base learning rate of $2 \times 10^{-5}$, while the classification head receives a 5x higher learning rate of $1 \times 10^{-4}$ to facilitate faster adaptation of the task-specific layer.
